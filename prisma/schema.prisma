@@ -1,0 +1,242 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum LanguageCode {
+  EN
+  ES
+}
+
+enum ReportLanguageMode {
+  EN
+  ES
+  BILINGUAL
+}
+
+enum ProjectCadence {
+  WEEKLY
+  MONTHLY
+}
+
+enum HealthStatus {
+  GREEN
+  AMBER
+  RED
+}
+
+model User {
+  id                String       @id @default(uuid())
+  email             String       @unique
+  fullName          String
+  preferredLanguage LanguageCode @default(EN)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  managedProjects   Project[] @relation("ProjectManager")
+  sponsoredProjects Project[] @relation("ProjectSponsor")
+}
+
+model ProjectStatus {
+  id        String  @id @default(uuid())
+  code      String  @unique
+  name      String
+  nameEs    String?
+  sortOrder Int     @default(100)
+  isActive  Boolean @default(true)
+
+  projects           Project[]
+  projectWorkstreams ProjectWorkstream[]
+}
+
+model ProjectType {
+  id            String  @id @default(uuid())
+  code          String  @unique
+  name          String
+  nameEs        String?
+  description   String?
+  descriptionEs String?
+  sortOrder     Int     @default(100)
+  isActive      Boolean @default(true)
+
+  projects Project[]
+}
+
+model Project {
+  id                 String             @id @default(uuid())
+  projectCode        String             @unique
+  name               String
+  nameEs             String?
+  description        String?
+  descriptionEs      String?
+  projectTypeId      String?
+  statusId           String
+  projectManagerId   String
+  sponsorId          String?
+  startDate          DateTime
+  reportingCadence   ProjectCadence
+  defaultLanguage    LanguageCode       @default(EN)
+  secondaryLanguage  LanguageCode?
+  reportLanguageMode ReportLanguageMode @default(EN)
+  healthStatus       HealthStatus       @default(GREEN)
+  isActive           Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  plannedStartDate   DateTime?
+  plannedEndDate     DateTime?
+  actualStartDate    DateTime?
+  actualEndDate      DateTime?
+
+  projectType        ProjectType?        @relation(fields: [projectTypeId], references: [id])
+  status             ProjectStatus       @relation(fields: [statusId], references: [id])
+  projectManager     User                @relation("ProjectManager", fields: [projectManagerId], references: [id])
+  sponsor            User?               @relation("ProjectSponsor", fields: [sponsorId], references: [id])
+  projectWorkstreams ProjectWorkstream[]
+  events ProjectEvent[]
+  timeEntries        TimeEntry[]
+}
+
+model TaskFamily {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  nameEs    String?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(100)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Phase {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+
+  workstreams Workstream[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Workstream {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+
+  phaseId String
+  phase   Phase  @relation(fields: [phaseId], references: [id])
+
+  projectWorkstreams  ProjectWorkstream[]
+  templateWorkstreams TemplateWorkstream[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProjectWorkstream {
+  id String @id @default(uuid())
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  workstreamId String
+  workstream   Workstream @relation(fields: [workstreamId], references: [id])
+
+  statusId String?
+  status   ProjectStatus? @relation(fields: [statusId], references: [id])
+
+  startDate DateTime?
+  endDate   DateTime?
+
+  plannedStartDate DateTime?
+  plannedEndDate   DateTime?
+  actualStartDate  DateTime?
+  actualEndDate    DateTime?
+
+  notes String?
+
+  isActive Boolean @default(true)
+
+  timeEntries TimeEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProjectTemplate {
+  id       String  @id @default(uuid())
+  code     String  @unique
+  name     String
+  isActive Boolean @default(true)
+
+  templateWorkstreams TemplateWorkstream[]
+}
+
+model TemplateWorkstream {
+  id           String @id @default(uuid())
+
+  templateId   String
+  template     ProjectTemplate @relation(fields: [templateId], references: [id])
+
+  workstreamId String
+  workstream   Workstream @relation(fields: [workstreamId], references: [id])
+
+  sortOrder         Int @default(0)
+  defaultStatusId   String?
+
+  plannedOffsetDays Int?
+  durationDays      Int?
+}
+
+model ProjectEvent {
+  id          String   @id @default(cuid())
+  projectId   String
+  eventTypeId String?
+
+  name        String
+  eventDate   DateTime
+  isActive    Boolean  @default(true)
+
+  project     Project   @relation(fields: [projectId], references: [id])
+  eventType   EventType? @relation(fields: [eventTypeId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model EventType {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(100)
+  isActive    Boolean  @default(true)
+
+  projectEvents ProjectEvent[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TimeEntry {
+  id String @id @default(uuid())
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  projectWorkstreamId String?
+  projectWorkstream   ProjectWorkstream? @relation(fields: [projectWorkstreamId], references: [id])
+
+  date        DateTime
+  hours       Float
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
