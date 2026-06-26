@@ -1,20 +1,31 @@
 "use client";
 
+import { TranslatedButtonLabel, TranslatedText } from "@/components/ui/TranslatedControls";
 import { useState } from "react";
 import { useActionToast } from "@/components/ui/useActionToast";
-import {
-  buttonStyle,
-  inputStyle,
-  tableButtonStyle,
-} from "@/components/ui/layoutStyles";
+import { AddActionButton } from "@/components/ui/AddActionButton";
+import { NestedTablePanel } from "@/components/ui/NestedTablePanel";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { inputStyle, tableButtonStyle } from "@/components/ui/layoutStyles";
 import { tableStyle, thStyle, tdStyle } from "@/components/ui/tableStyles";
+import type {
+  ProjectTemplateDetail,
+  TemplateWorkstreamActionResult,
+  TemplateWorkstreamOption,
+  TemplateWorkstreamRow as TemplateWorkstreamRowData,
+} from "@/lib/domain/projectTemplates/projectTemplateTypes";
+
+type ActionHandler = (
+  formData: FormData
+) => Promise<TemplateWorkstreamActionResult | undefined>;
+type ClientActionHandler = (formData: FormData) => Promise<void>;
 
 type Props = {
-  template: any;
-  workstreams: any[];
-  addTemplateWorkstream: (formData: FormData) => Promise<any>;
-  updateTemplateWorkstream: (formData: FormData) => Promise<any>;
-  deleteTemplateWorkstream: (formData: FormData) => Promise<any>;
+  template: ProjectTemplateDetail;
+  workstreams: TemplateWorkstreamOption[];
+  addTemplateWorkstream: ActionHandler;
+  updateTemplateWorkstream: ActionHandler;
+  deleteTemplateWorkstream: ActionHandler;
 };
 
 export function TemplateWorkstreamsTable({
@@ -27,7 +38,7 @@ export function TemplateWorkstreamsTable({
   const [isCreating, setIsCreating] = useState(false);
   const { handleAction } = useActionToast();
 
-   async function handleAdd(formData: FormData) {
+  async function handleAdd(formData: FormData) {
     await handleAction(addTemplateWorkstream, formData, () =>
       setIsCreating(false)
     );
@@ -43,136 +54,160 @@ export function TemplateWorkstreamsTable({
 
   return (
     <>
-      <div style={{ marginBottom: "1rem" }}>
-        <button style={buttonStyle} onClick={() => setIsCreating(true)}>
-          ➕ Add Workstream
-        </button>
-      </div>
+      <SectionHeader
+        title={<TranslatedText labelKey="labels.workstreams" />}
+        action={
+          <AddActionButton onClick={() => setIsCreating(true)}>
+            <TranslatedText labelKey="workstreams.add" />
+          </AddActionButton>
+        }
+      />
 
       <form id="add-template-workstream-form" action={handleAdd} />
 
-      <table style={tableStyle}>
-        <thead>
-          <tr>
-            <th style={thStyle}>Phase</th>
-            <th style={thStyle}>Workstream</th>
-            <th style={thStyle}>Sort Order</th>
-            <th style={thStyle}>Start Offset</th>
-            <th style={thStyle}>Duration</th>
-            <th style={thStyle}>Actions</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {isCreating && (
+      <NestedTablePanel>
+        <table style={tableStyle}>
+          <thead>
             <tr>
-              <td style={tdStyle}>—</td>
-
-              <td style={tdStyle}>
-                <input
-                  type="hidden"
-                  name="templateId"
-                  value={template.id}
-                  form="add-template-workstream-form"
-                />
-
-                <select
-                  name="workstreamId"
-                  required
-                  style={inputStyle}
-                  form="add-template-workstream-form"
-                >
-                  <option value="">Select workstream</option>
-                  {workstreams.map((workstream) => (
-                    <option key={workstream.id} value={workstream.id}>
-                      {workstream.phase?.name
-                        ? `${workstream.phase.name} - ${workstream.name}`
-                        : workstream.name}
-                    </option>
-                  ))}
-                </select>
-              </td>
-
-              <td style={tdStyle}>
-                <input
-                  type="number"
-                  name="sortOrder"
-                  defaultValue={100}
-                  style={inputStyle}
-                  form="add-template-workstream-form"
-                />
-              </td>
-
-              <td style={tdStyle}>
-                <input
-                  type="number"
-                  name="plannedOffsetDays"
-                  defaultValue={0}
-                  style={inputStyle}
-                  form="add-template-workstream-form"
-                />
-              </td>
-
-              <td style={tdStyle}>
-                <input
-                  type="number"
-                  name="durationDays"
-                  defaultValue={5}
-                  style={inputStyle}
-                  form="add-template-workstream-form"
-                />
-              </td>
-
-              <td style={tdStyle}>
-                <button
-                  type="submit"
-                  form="add-template-workstream-form"
-                  style={tableButtonStyle}
-                >
-                  Save
-                </button>{" "}
-                <button
-                  type="button"
-                  style={tableButtonStyle}
-                  onClick={() => setIsCreating(false)}
-                >
-                  Cancel
-                </button>
-              </td>
+              <th style={thStyle}><TranslatedText labelKey="labels.phase" /></th>
+              <th style={thStyle}><TranslatedText labelKey="labels.workstream" /></th>
+              <th style={thStyle}><TranslatedText labelKey="labels.sort" /></th>
+              <th style={thStyle}><TranslatedText labelKey="labels.startOffsetDays" /></th>
+              <th style={thStyle}><TranslatedText labelKey="labels.durationDays" /></th>
+              <th style={thStyle}><TranslatedText labelKey="labels.actions" /></th>
             </tr>
-          )}
+          </thead>
 
-          {template.templateWorkstreams.map((tw: any) => (
-            <TemplateWorkstreamRow
-              key={tw.id}
-              tw={tw}
-              templateId={template.id}
-              updateTemplateWorkstream={handleUpdate}
-              deleteTemplateWorkstream={handleDelete}
-            />
-          ))}
-        </tbody>
-      </table>
+          <tbody>
+            {isCreating && (
+              <tr>
+                <td style={tdStyle}>-</td>
+
+                <td style={tdStyle}>
+                  <input
+                    type="hidden"
+                    name="templateId"
+                    value={template.id}
+                    form="add-template-workstream-form"
+                  />
+
+                  <select
+                    name="workstreamId"
+                    required
+                    style={inputStyle}
+                    form="add-template-workstream-form"
+                  >
+                    <option value="">Select workstream</option>
+                    {workstreams.map((workstream) => (
+                      <option key={workstream.id} value={workstream.id}>
+                        {workstream.phase?.name
+                          ? `${workstream.phase.name} - ${workstream.name}`
+                          : workstream.name}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+
+                <td style={tdStyle}>
+                  <input
+                    type="number"
+                    name="sortOrder"
+                    defaultValue={100}
+                    style={inputStyle}
+                    form="add-template-workstream-form"
+                  />
+                </td>
+
+                <td style={tdStyle}>
+                  <input
+                    type="number"
+                    name="plannedOffsetDays"
+                    defaultValue={0}
+                    style={inputStyle}
+                    form="add-template-workstream-form"
+                  />
+                </td>
+
+                <td style={tdStyle}>
+                  <input
+                    type="number"
+                    name="durationDays"
+                    defaultValue={5}
+                    style={inputStyle}
+                    form="add-template-workstream-form"
+                  />
+                </td>
+
+                <td style={tdStyle}>
+                  <div style={{ display: "flex", gap: "0.25rem" }}>
+                    <button
+                      type="submit"
+                      form="add-template-workstream-form"
+                      style={tableButtonStyle}
+                    >
+                      <TranslatedButtonLabel labelKey="actions.save" />
+                    </button>
+                    <button
+                      type="button"
+                      style={tableButtonStyle}
+                      onClick={() => setIsCreating(false)}
+                    >
+                      <TranslatedButtonLabel labelKey="actions.cancel" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+
+            {template.templateWorkstreams.map((templateWorkstream) => (
+              <TemplateWorkstreamRow
+                key={templateWorkstream.id}
+                templateWorkstream={templateWorkstream}
+                templateId={template.id}
+                updateTemplateWorkstream={handleUpdate}
+                deleteTemplateWorkstream={handleDelete}
+              />
+            ))}
+
+            {template.templateWorkstreams.length === 0 && !isCreating && (
+              <tr>
+                <td style={tdStyle} colSpan={6}>
+                  No workstreams configured for this template.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </NestedTablePanel>
     </>
   );
 }
 
 function TemplateWorkstreamRow({
-  tw,
+  templateWorkstream,
   templateId,
   updateTemplateWorkstream,
   deleteTemplateWorkstream,
-}: any) {
-  const [sortOrder, setSortOrder] = useState(tw.sortOrder ?? 100);
-  const [plannedOffsetDays, setPlannedOffsetDays] = useState(
-    tw.plannedOffsetDays ?? 0
+}: {
+  templateWorkstream: TemplateWorkstreamRowData;
+  templateId: string;
+  updateTemplateWorkstream: ClientActionHandler;
+  deleteTemplateWorkstream: ClientActionHandler;
+}) {
+  const [sortOrder, setSortOrder] = useState(
+    templateWorkstream.sortOrder ?? 100
   );
-  const [durationDays, setDurationDays] = useState(tw.durationDays ?? 5);
+  const [plannedOffsetDays, setPlannedOffsetDays] = useState(
+    templateWorkstream.plannedOffsetDays ?? 0
+  );
+  const [durationDays, setDurationDays] = useState(
+    templateWorkstream.durationDays ?? 5
+  );
 
   return (
     <tr>
-      <td style={tdStyle}>{tw.workstream?.phase?.name ?? "-"}</td>
-      <td style={tdStyle}>{tw.workstream?.name ?? "-"}</td>
+      <td style={tdStyle}>{templateWorkstream.workstream?.phase?.name ?? "-"}</td>
+      <td style={tdStyle}>{templateWorkstream.workstream?.name ?? "-"}</td>
 
       <td style={tdStyle}>
         <input
@@ -201,12 +236,13 @@ function TemplateWorkstreamRow({
         />
       </td>
 
-      <td style={tdStyle}>
+      <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
+        <div style={{ display: "flex", gap: "0.25rem" }}>
         <form
           action={updateTemplateWorkstream}
           style={{ margin: 0, display: "inline" }}
         >
-          <input type="hidden" name="id" value={tw.id} />
+          <input type="hidden" name="id" value={templateWorkstream.id} />
           <input type="hidden" name="templateId" value={templateId} />
           <input type="hidden" name="sortOrder" value={sortOrder} />
           <input
@@ -217,21 +253,22 @@ function TemplateWorkstreamRow({
           <input type="hidden" name="durationDays" value={durationDays} />
 
           <button type="submit" style={tableButtonStyle}>
-            Save
+            <TranslatedButtonLabel labelKey="actions.save" />
           </button>
-        </form>{" "}
+        </form>
 
         <form
           action={deleteTemplateWorkstream}
           style={{ margin: 0, display: "inline" }}
         >
-          <input type="hidden" name="id" value={tw.id} />
+          <input type="hidden" name="id" value={templateWorkstream.id} />
           <input type="hidden" name="templateId" value={templateId} />
 
           <button type="submit" style={tableButtonStyle}>
-            Delete
+            <TranslatedButtonLabel labelKey="actions.delete" />
           </button>
         </form>
+        </div>
       </td>
     </tr>
   );

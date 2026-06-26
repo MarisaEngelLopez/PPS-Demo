@@ -1,80 +1,77 @@
 "use server";
 
+import { getPhaseAdminRows } from "@/lib/domain/phases/phaseQueries";
+import {
+  parsePhaseInput,
+  phaseError,
+  phaseOk,
+  validatePhaseInput,
+} from "@/lib/domain/phases/phaseValidation";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
-export async function createPhase(formData: FormData) {
-  "use server";
+const PHASES_PATH = "/admin/phases";
 
-  const name = String(formData.get("name") || "").trim();
-  const description = String(formData.get("description") || "").trim();
-  const sortOrder = Number(formData.get("sortOrder") || 0);
+export async function createPhase(formData: FormData) {
+  const input = parsePhaseInput(formData);
 
   try {
-    if (!name) {
-      return {
-        ok: false,
-        message: "Phase not added: name is required.",
-      };
-    }
-
-    const existing = await prisma.phase.findFirst({
-      where: {
-        name: {
-          equals: name,
-        },
-      },
-    });
-
-    if (existing) {
-      return {
-        ok: false,
-        message: "Phase not added: already exists in database.",
-      };
-    }
+    const validation = await validatePhaseInput(input);
+    if (validation) return validation;
 
     await prisma.phase.create({
       data: {
-        name,
-        description: description || null,
-        sortOrder,
+        ...input,
         isActive: true,
       },
     });
 
-    revalidatePath("/admin/phases");
+    revalidatePath(PHASES_PATH);
 
-    return {
-      ok: true,
-      message: "Phase created successfully.",
-    };
+    return phaseOk("Phase created successfully.");
   } catch (e) {
     console.error("Create phase error:", e);
 
-    return {
-      ok: false,
-      message: "Phase not added: database error.",
-    };
+    return phaseError("Phase not added: database error.");
+  }
+}
+
+export async function updatePhase(formData: FormData) {
+  const id = String(formData.get("id") || "");
+  const input = parsePhaseInput(formData);
+
+  try {
+    if (!id) return phaseError("Phase not updated: missing id.");
+
+    const validation = await validatePhaseInput(input, id);
+    if (validation) return validation;
+
+    await prisma.phase.update({
+      where: { id },
+      data: input,
+    });
+
+    revalidatePath(PHASES_PATH);
+
+    return phaseOk("Phase updated successfully.");
+  } catch (e) {
+    console.error("Update phase error:", e);
+
+    return phaseError("Phase not updated: database error.");
   }
 }
 
 export async function togglePhase(formData: FormData) {
-  "use server";
-
   const id = String(formData.get("id"));
   const current = formData.get("current") === "true";
 
   try {
-    // Optional safety check
     const existing = await prisma.phase.findUnique({
       where: { id },
     });
 
     if (!existing) {
-      return {
-        ok: false,
-        message: "Phase not updated: it no longer exists.",
-      };
+      return phaseError("Phase not updated: it no longer exists.");
     }
 
     const updated = await prisma.phase.update({
@@ -84,59 +81,58 @@ export async function togglePhase(formData: FormData) {
       },
     });
 
-    revalidatePath("/admin/phases");
+    revalidatePath(PHASES_PATH);
 
-    return {
-      ok: true,
-      message: updated.isActive
+    return phaseOk(
+      updated.isActive
         ? "Phase activated successfully."
-        : "Phase deactivated successfully.",
-    };
+        : "Phase deactivated successfully."
+    );
   } catch (e) {
     console.error("Toggle phase error:", e);
 
-    return {
-      ok: false,
-      message: "Phase not updated: database error.",
-    };
+    return phaseError("Phase not updated: database error.");
   }
 }
 
 export async function deletePhase(formData: FormData) {
-  "use server";
-
   const id = String(formData.get("id"));
 
   try {
-    // 🔍 Check if phase is used
-    const inUse = await prisma.workstream.findFirst({
+    const existing = await prisma.phase.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      return phaseError("Phase not deleted: it no longer exists.");
+    }
+
+    if (existing.isActive) {
+      return phaseError("Phase not deleted: deactivate it first.");
+    }
+
+    const workstreamCount = await prisma.workstream.count({
       where: { phaseId: id },
     });
 
-    if (inUse) {
-      return {
-        ok: false,
-        message: "Phase not deleted: it has been used in other functions.",
-      };
+    if (workstreamCount > 0) {
+      return phaseError("Phase not deleted: it is already used by workstreams.");
     }
 
-    // ✅ Safe to delete
     await prisma.phase.delete({
       where: { id },
     });
 
-    revalidatePath("/admin/phases");
+    revalidatePath(PHASES_PATH);
 
-    return {
-      ok: true,
-      message: "Phase deleted successfully.",
-    };
+    return phaseOk("Phase deleted successfully.");
   } catch (e) {
     console.error("Delete phase error:", e);
 
-    return {
-      ok: false,
-      message: "Phase not deleted: database error.",
-    };
+    return phaseError("Phase not deleted: database error.");
   }
+}
+
+export async function listPhaseAdminRows() {
+  return getPhaseAdminRows();
 }

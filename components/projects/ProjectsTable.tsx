@@ -1,44 +1,66 @@
 "use client";
 
+import { TranslatedButtonLabel, TranslatedText } from "@/components/ui/TranslatedControls";
 import { useState } from "react";
 import Link from "next/link";
 import { useActionToast } from "@/components/ui/useActionToast";
+import { AddActionButton } from "@/components/ui/AddActionButton";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { inputStyle, tableButtonStyle } from "@/components/ui/layoutStyles";
+import { StandardTable, TableActionGroup } from "@/components/ui/TablePrimitives";
+import { thStyle, tdStyle } from "@/components/ui/tableStyles";
+import { useTranslation } from "@/components/i18n/TranslationProvider";
 import {
-  buttonStyle,
-  inputStyle,
-  tableButtonStyle,
-} from "@/components/ui/layoutStyles";
-import { tableStyle, thStyle, tdStyle } from "@/components/ui/tableStyles";
+  getConfiguredOptions,
+  translateConfiguredOption,
+  translateProjectHealth,
+} from "@/lib/i18n/displayTranslations";
 
 type Project = {
   id: string;
   projectCode: string;
   name: string;
+  governedStatusId?: string | null;
   startDate?: string | Date | null;
   healthStatus: string;
-  projectType?: { name: string } | null;
-  status?: { name: string } | null;
-  projectManager?: { fullName: string } | null;
+  projectType?: { code?: string | null; name: string; nameEs?: string | null } | null;
+  governedStatus?: { code?: string | null; name: string; nameEs?: string | null } | null;
+  projectManagerContact?: { name: string } | null;
 };
 
 type Option = {
   id: string;
+  code?: string | null;
   name: string;
+  nameEs?: string | null;
 };
 
-type UserOption = {
+type OrganizationOption = {
   id: string;
-  fullName: string;
+  name: string;
+  displayName?: string | null;
+  contacts?: ContactOption[];
+};
+
+type ContactOption = {
+  id: string;
+  name: string;
+  roleTitle?: string | null;
 };
 
 type Props = {
   projects: Project[];
   projectTypes: Option[];
-  statuses: Option[];
-  users: UserOption[];
+  projectStatusOptions: Option[];
+  openProjectStatusIds: string[];
+  organizations: OrganizationOption[];
   templates: Option[];
-  createProject: (formData: FormData) => Promise<any>;
-  deleteProject: (formData: FormData) => Promise<any>;
+  createProject: (
+    formData: FormData
+  ) => Promise<{ ok: boolean; message: string } | undefined>;
+  deleteProject: (
+    formData: FormData
+  ) => Promise<{ ok: boolean; message: string } | undefined>;
 };
 
 function formatDate(value: string | Date | null | undefined) {
@@ -49,14 +71,28 @@ function formatDate(value: string | Date | null | undefined) {
 export function ProjectsTable({
   projects,
   projectTypes,
-  statuses,
-  users,
+  projectStatusOptions,
+  openProjectStatusIds,
+  organizations,
   templates,
   createProject,
   deleteProject,
 }: Props) {
   const [isCreating, setIsCreating] = useState(false);
   const { handleAction } = useActionToast();
+  const { t, locale } = useTranslation();
+  const projectStatusSelectOptions = getConfiguredOptions(
+    projectStatusOptions,
+    locale,
+    t,
+    "status"
+  );
+  const projectTypeSelectOptions = getConfiguredOptions(
+    projectTypes,
+    locale,
+    t,
+    "projectType"
+  );
 
   async function handleCreate(formData: FormData) {
     await handleAction(createProject, formData, () => setIsCreating(false));
@@ -66,44 +102,46 @@ export function ProjectsTable({
     await handleAction(deleteProject, formData);
   }
 
+  const projectManagerContacts = organizations.flatMap((organization) =>
+    (organization.contacts ?? []).map((contact) => ({
+      ...contact,
+      organizationName: organization.displayName || organization.name,
+    }))
+  );
+
   return (
     <>
-      <div style={{ marginBottom: "1rem" }}>
-        <button style={buttonStyle} onClick={() => setIsCreating(true)}>
-          ➕ New Project
-        </button>
-      </div>
+<SectionHeader
+  title={<TranslatedText labelKey="pages.projectPortfolio" />}
+  action={
+    <AddActionButton
+      onClick={() => setIsCreating(true)}
+      labelKey="actions.addProject"
+    />
+  }
+/>
 
       <form id="create-project-form" action={handleCreate} />
 
-      <table style={tableStyle}>
+      <StandardTable>
         <thead>
           <tr>
-            <th style={thStyle}>Code</th>
-            <th style={thStyle}>Name</th>
-            <th style={thStyle}>Type</th>
-            <th style={thStyle}>Template</th>
-            <th style={thStyle}>Start Date</th>
-            <th style={thStyle}>Status</th>
-            <th style={thStyle}>Project Manager</th>
-            <th style={thStyle}>Health</th>
-            <th style={thStyle}>Action</th>
+            <th style={thStyle}><TranslatedText labelKey="labels.code" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.name" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.type" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.template" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.startDate" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.status" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.projectManager" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.health" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.action" /></th>
           </tr>
         </thead>
 
         <tbody>
           {isCreating && (
             <tr>
-              <td style={tdStyle}>
-                <input
-                  name="projectCode"
-                  required
-                  placeholder="PRJ-002"
-                  style={inputStyle}
-                  form="create-project-form"
-                  autoComplete="off"
-                />
-              </td>
+              <td style={tdStyle}>Auto</td>
 
               <td style={tdStyle}>
                 <input
@@ -124,9 +162,9 @@ export function ProjectsTable({
                   form="create-project-form"
                 >
                   <option value="">Select type</option>
-                  {projectTypes.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.name}
+                  {projectTypeSelectOptions.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
                     </option>
                   ))}
                 </select>
@@ -157,39 +195,42 @@ export function ProjectsTable({
                 />
               </td>
 
-              <td style={tdStyle}>
-                <select
-                  name="statusId"
-                  required
-                  style={inputStyle}
-                  form="create-project-form"
-                >
-                  <option value="">Select status</option>
-                  {statuses.map((status) => (
-                    <option key={status.id} value={status.id}>
-                      {status.name}
-                    </option>
-                  ))}
-                </select>
-              </td>
+             <td style={tdStyle}>
+  <select
+    name="governedStatusId"
+    defaultValue=""
+    required
+    style={inputStyle}
+    form="create-project-form"
+  >
+    <option value="">Select status</option>
+   {projectStatusSelectOptions.map((option) => (
+  <option key={`project-status-${option.value}`} value={option.value}>
+    {option.label}
+  </option>
+))}
+  </select>
+</td>
 
               <td style={tdStyle}>
                 <select
-                  name="projectManagerId"
+                  name="projectManagerContactId"
                   required
                   style={inputStyle}
                   form="create-project-form"
                 >
                   <option value="">Select manager</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.fullName}
+                  {projectManagerContacts.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name}
+                      {contact.roleTitle ? ` - ${contact.roleTitle}` : ""}
+                      {contact.organizationName ? ` (${contact.organizationName})` : ""}
                     </option>
                   ))}
                 </select>
               </td>
 
-              <td style={tdStyle}>GREEN</td>
+              <td style={tdStyle}>{translateProjectHealth("GREEN", t)}</td>
 
               <td style={tdStyle}>
                 <button
@@ -197,21 +238,27 @@ export function ProjectsTable({
                   form="create-project-form"
                   style={tableButtonStyle}
                 >
-                  Save
+                  <TranslatedButtonLabel labelKey="actions.save" />
                 </button>{" "}
                 <button
                   type="button"
                   style={tableButtonStyle}
                   onClick={() => setIsCreating(false)}
                 >
-                  Cancel
+                  <TranslatedButtonLabel labelKey="actions.cancel" />
                 </button>
               </td>
             </tr>
           )}
 
-          {projects.map((project) => (
-            <tr key={project.id}>
+          {projects.map((project) => {
+            const canDelete = Boolean(
+              project.governedStatusId &&
+                openProjectStatusIds.includes(project.governedStatusId)
+            );
+
+            return (
+              <tr key={project.id}>
               <td style={tdStyle}>{project.projectCode}</td>
 
               <td style={tdStyle}>
@@ -227,30 +274,42 @@ export function ProjectsTable({
                 </Link>
               </td>
 
-              <td style={tdStyle}>{project.projectType?.name ?? "-"}</td>
+              <td style={tdStyle}>
+                {translateConfiguredOption(project.projectType, locale, t, "projectType") || "-"}
+              </td>
               <td style={tdStyle}>-</td>
               <td style={tdStyle}>{formatDate(project.startDate)}</td>
-              <td style={tdStyle}>{project.status?.name ?? "-"}</td>
+            <td style={tdStyle}>
+              {translateConfiguredOption(project.governedStatus, locale, t, "status") || "-"}
+            </td>
               <td style={tdStyle}>
-                {project.projectManager?.fullName ?? "-"}
+                {project.projectManagerContact?.name ?? "-"}
               </td>
-              <td style={tdStyle}>{project.healthStatus}</td>
+              <td style={tdStyle}>{translateProjectHealth(project.healthStatus, t)}</td>
 
               <td style={tdStyle}>
-                <form
-                  action={handleDelete}
-                  style={{ margin: 0, display: "inline" }}
-                >
-                  <input type="hidden" name="id" value={project.id} />
-                  <button type="submit" style={tableButtonStyle}>
-                    Delete
-                  </button>
-                </form>
+                <TableActionGroup>
+                  <Link href={`/projects/${project.id}`} style={tableButtonStyle}>
+                    <TranslatedButtonLabel labelKey="actions.edit" />
+                  </Link>
+                {canDelete ? (
+                  <form
+                    action={handleDelete}
+                    style={{ margin: 0, display: "inline" }}
+                  >
+                    <input type="hidden" name="id" value={project.id} />
+                    <button type="submit" style={tableButtonStyle}>
+                      <TranslatedButtonLabel labelKey="actions.delete" />
+                    </button>
+                  </form>
+                ) : null}
+                </TableActionGroup>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
-      </table>
+      </StandardTable>
     </>
   );
 }

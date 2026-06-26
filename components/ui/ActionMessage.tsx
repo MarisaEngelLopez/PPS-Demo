@@ -1,6 +1,9 @@
-// components/ui/ActionMessage.tsx
+type ActionResult = {
+  ok: boolean;
+  message: string;
+};
 
-export function ActionMessage({ result }: { result: any }) {
+export function ActionMessage({ result }: { result?: ActionResult | null }) {
   if (!result) return null;
 
   return (

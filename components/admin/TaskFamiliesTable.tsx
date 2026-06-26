@@ -1,25 +1,44 @@
 "use client";
 
+import { TranslatedButtonLabel, TranslatedText } from "@/components/ui/TranslatedControls";
 import { useState } from "react";
 import { useActionToast } from "@/components/ui/useActionToast";
-import {
-  buttonStyle,
-  inputStyle,
-  tableButtonStyle,
-} from "@/components/ui/layoutStyles";
+import { AddActionButton } from "@/components/ui/AddActionButton";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { inputStyle, tableButtonStyle } from "@/components/ui/layoutStyles";
 import { tableStyle, thStyle, tdStyle } from "@/components/ui/tableStyles";
+import type {
+  TaskFamilyActionResult,
+  TaskFamilyAdminRow,
+} from "@/lib/domain/taskFamilies/taskFamilyTypes";
+
+type ActionHandler = (
+  formData: FormData
+) => Promise<TaskFamilyActionResult | undefined>;
+type ClientActionHandler = (formData: FormData) => Promise<void>;
 
 export function TaskFamiliesTable({
   taskFamilies,
   createTaskFamily,
+  updateTaskFamily,
   toggleTaskFamily,
   deleteTaskFamily,
-}: any) {
+}: {
+  taskFamilies: TaskFamilyAdminRow[];
+  createTaskFamily: ActionHandler;
+  updateTaskFamily: ActionHandler;
+  toggleTaskFamily: ActionHandler;
+  deleteTaskFamily: ActionHandler;
+}) {
   const [isCreating, setIsCreating] = useState(false);
   const { handleAction } = useActionToast();
 
-    async function handleCreate(formData: FormData) {
+  async function handleCreate(formData: FormData) {
     await handleAction(createTaskFamily, formData, () => setIsCreating(false));
+  }
+
+  async function handleUpdate(formData: FormData) {
+    await handleAction(updateTaskFamily, formData);
   }
 
   async function handleToggle(formData: FormData) {
@@ -32,23 +51,26 @@ export function TaskFamiliesTable({
 
   return (
     <>
-      <div style={{ marginBottom: "1rem" }}>
-        <button style={buttonStyle} onClick={() => setIsCreating(true)}>
-          ➕ New Task Family
-        </button>
-      </div>
+      <SectionHeader
+        title={<TranslatedText labelKey="labels.taskFamily" />}
+        action={
+          <AddActionButton onClick={() => setIsCreating(true)}>
+            <TranslatedText labelKey="actions.newTaskFamily" />
+          </AddActionButton>
+        }
+      />
 
       <form id="create-task-family-form" action={handleCreate} />
 
       <table style={tableStyle}>
         <thead>
           <tr>
-            <th style={thStyle}>Code</th>
-            <th style={thStyle}>Name</th>
-            <th style={thStyle}>Description</th>
-            <th style={thStyle}>Sort</th>
-            <th style={thStyle}>Status</th>
-            <th style={thStyle}>Action</th>
+            <th style={thStyle}><TranslatedText labelKey="labels.code" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.name" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.sort" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.active" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.timeEntries" /></th>
+            <th style={thStyle}><TranslatedText labelKey="labels.actions" /></th>
           </tr>
         </thead>
 
@@ -75,15 +97,11 @@ export function TaskFamiliesTable({
                   form="create-task-family-form"
                   autoComplete="off"
                 />
-              </td>
-
-              <td style={tdStyle}>
                 <input
-                  name="description"
-                  placeholder="Description"
-                  style={inputStyle}
+                  type="hidden"
+                  name="nameEs"
+                  value=""
                   form="create-task-family-form"
-                  autoComplete="off"
                 />
               </td>
 
@@ -91,13 +109,14 @@ export function TaskFamiliesTable({
                 <input
                   name="sortOrder"
                   type="number"
-                  defaultValue={0}
+                  defaultValue={100}
                   style={inputStyle}
                   form="create-task-family-form"
                 />
               </td>
 
-              <td style={tdStyle}>New</td>
+              <td style={tdStyle}><TranslatedText labelKey="labels.new" /></td>
+              <td style={tdStyle}>0</td>
 
               <td style={tdStyle}>
                 <button
@@ -105,59 +124,163 @@ export function TaskFamiliesTable({
                   form="create-task-family-form"
                   style={tableButtonStyle}
                 >
-                  Save
+                  <TranslatedButtonLabel labelKey="actions.save" />
                 </button>{" "}
                 <button
                   type="button"
                   style={tableButtonStyle}
                   onClick={() => setIsCreating(false)}
                 >
-                  Cancel
+                  <TranslatedButtonLabel labelKey="actions.cancel" />
                 </button>
               </td>
             </tr>
           )}
 
-          {taskFamilies.map((taskFamily: any) => (
-            <tr key={taskFamily.id}>
-              <td style={tdStyle}>{taskFamily.code}</td>
-              <td style={tdStyle}>{taskFamily.name}</td>
-              <td style={tdStyle}>{taskFamily.description || "-"}</td>
-              <td style={tdStyle}>{taskFamily.sortOrder}</td>
-              <td style={tdStyle}>
-                {taskFamily.isActive ? "Active" : "Inactive"}
-              </td>
-
-              <td style={tdStyle}>
-                <form
-                  action={handleToggle}
-                  style={{ margin: 0, display: "inline" }}
-                >
-                  <input type="hidden" name="id" value={taskFamily.id} />
-                  <input
-                    type="hidden"
-                    name="current"
-                    value={String(taskFamily.isActive)}
-                  />
-                  <button type="submit" style={tableButtonStyle}>
-                    {taskFamily.isActive ? "Deactivate" : "Activate"}
-                  </button>
-                </form>{" "}
-
-                <form
-                  action={handleDelete}
-                  style={{ margin: 0, display: "inline" }}
-                >
-                  <input type="hidden" name="id" value={taskFamily.id} />
-                  <button type="submit" style={tableButtonStyle}>
-                    Delete
-                  </button>
-                </form>
-              </td>
-            </tr>
+          {taskFamilies.map((taskFamily) => (
+            <TaskFamilyRow
+              key={taskFamily.id}
+              taskFamily={taskFamily}
+              handleUpdate={handleUpdate}
+              handleToggle={handleToggle}
+              handleDelete={handleDelete}
+            />
           ))}
         </tbody>
       </table>
     </>
+  );
+}
+
+function TaskFamilyRow({
+  taskFamily,
+  handleUpdate,
+  handleToggle,
+  handleDelete,
+}: {
+  taskFamily: TaskFamilyAdminRow;
+  handleUpdate: ClientActionHandler;
+  handleToggle: ClientActionHandler;
+  handleDelete: ClientActionHandler;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState({
+    code: taskFamily.code ?? "",
+    name: taskFamily.name ?? "",
+    nameEs: taskFamily.nameEs ?? "",
+    sortOrder: taskFamily.sortOrder ?? 100,
+  });
+
+  function resetDraft() {
+    setDraft({
+      code: taskFamily.code ?? "",
+      name: taskFamily.name ?? "",
+      nameEs: taskFamily.nameEs ?? "",
+      sortOrder: taskFamily.sortOrder ?? 100,
+    });
+  }
+
+  return (
+    <tr>
+      <td style={tdStyle}>
+        {isEditing ? (
+          <input
+            value={draft.code}
+            onChange={(e) =>
+              setDraft({ ...draft, code: e.target.value.toUpperCase() })
+            }
+            style={inputStyle}
+          />
+        ) : (
+          taskFamily.code
+        )}
+      </td>
+
+      <td style={tdStyle}>
+        {isEditing ? (
+          <input
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            style={inputStyle}
+          />
+        ) : (
+          taskFamily.name
+        )}
+      </td>
+
+      <td style={tdStyle}>
+        {isEditing ? (
+          <input
+            type="number"
+            value={draft.sortOrder}
+            onChange={(e) =>
+              setDraft({ ...draft, sortOrder: Number(e.target.value || 100) })
+            }
+            style={{ ...inputStyle, width: 80 }}
+          />
+        ) : (
+          taskFamily.sortOrder
+        )}
+      </td>
+
+      <td style={tdStyle}>
+        <TranslatedText labelKey={taskFamily.isActive ? "labels.active" : "labels.inactive"} />
+      </td>
+      <td style={tdStyle}>{taskFamily.timeEntryCount}</td>
+
+      <td style={tdStyle}>
+        {isEditing ? (
+          <>
+            <form action={handleUpdate} style={{ display: "inline" }}>
+              <input type="hidden" name="id" value={taskFamily.id} />
+              <input type="hidden" name="code" value={draft.code} />
+              <input type="hidden" name="name" value={draft.name} />
+              <input type="hidden" name="nameEs" value={draft.nameEs} />
+              <input type="hidden" name="sortOrder" value={draft.sortOrder} />
+              <button type="submit" style={tableButtonStyle}>
+                <TranslatedButtonLabel labelKey="actions.save" />
+              </button>
+            </form>{" "}
+            <button
+              type="button"
+              style={tableButtonStyle}
+              onClick={() => {
+                resetDraft();
+                setIsEditing(false);
+              }}
+            >
+              <TranslatedButtonLabel labelKey="actions.cancel" />
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              style={tableButtonStyle}
+              onClick={() => setIsEditing(true)}
+            >
+              <TranslatedButtonLabel labelKey="actions.edit" />
+            </button>{" "}
+            <form action={handleToggle} style={{ margin: 0, display: "inline" }}>
+              <input type="hidden" name="id" value={taskFamily.id} />
+              <input
+                type="hidden"
+                name="current"
+                value={String(taskFamily.isActive)}
+              />
+              <button type="submit" style={tableButtonStyle}>
+                {<TranslatedButtonLabel labelKey={taskFamily.isActive ? "actions.deactivate" : "actions.activate"} />}
+              </button>
+            </form>{" "}
+            <form action={handleDelete} style={{ margin: 0, display: "inline" }}>
+              <input type="hidden" name="id" value={taskFamily.id} />
+              <button type="submit" style={tableButtonStyle}>
+                <TranslatedButtonLabel labelKey="actions.delete" />
+              </button>
+            </form>
+          </>
+        )}
+      </td>
+    </tr>
   );
 }

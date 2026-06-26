@@ -1,70 +1,44 @@
-import { MainNav } from "@/components/MainNav";
+import { AdminCardGrid, AdminCardLink } from "@/components/ui/AdminCardLink";
 import { TimeTrackingTable } from "@/components/admin/TimeTrackingTable";
-import { pageStyle, h1Style } from "@/components/ui/layoutStyles";
-import { prisma } from "@/lib/prisma";
-import { createTimeEntry, deleteTimeEntry } from "./actions";
+import { h1Style, pageStyle } from "@/components/ui/layoutStyles";
+import { getTimeTrackingBasePageData } from "@/lib/domain/agents/timeTrackingAssistantData";
+import { translate } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server";
+import { createTimeEntry, deleteTimeEntry, updateTimeEntry } from "./actions";
+
+export const dynamic = "force-dynamic";
 
 export default async function TimeTrackingPage() {
-  const projects = await prisma.project.findMany({
-    where: { isActive: true },
-    orderBy: { name: "asc" },
-  });
-
-  const projectWorkstreams = await prisma.projectWorkstream.findMany({
-  where: {
-        isActive: true,
-  },
-  include: {
-    project: true,
-    workstream: {
-      include: {
-        phase: true,
-      },
-    },
-  },
-  orderBy: [
-    { workstream: { phase: { sortOrder: "asc" } } },
-    { workstream: { sortOrder: "asc" } },
-  ],
-});
-
-  const timeEntries = await prisma.timeEntry.findMany({
-    include: {
-      project: true,
-      projectWorkstream: {
-        include: {
-          workstream: {
-            include: {
-              phase: true,
-            },
-          },
-        },
-      },
-    },
-    orderBy: [
-  { createdAt: "desc" },
-  { date: "desc" },
-],
-  });
+  const locale = await getServerLocale();
+  const t = (key: Parameters<typeof translate>[1]) => translate(locale, key);
+  const data = await getTimeTrackingBasePageData();
 
   return (
     <main style={pageStyle}>
-      <MainNav />
+      <h1 style={h1Style}>{t("timeTracking.title")}</h1>
 
-      <h1 style={h1Style}>Time Tracking</h1>
-
-<div style={{ marginBottom: 12, color: "red" }}>
-  Default project: {timeEntries[0]?.project?.projectCode} - {timeEntries[0]?.project?.name}
-</div>
+      <div style={{ marginBottom: 24 }}>
+        <AdminCardGrid>
+          <AdminCardLink
+            href="/time-tracking/assistant"
+            title={t("timeTracking.assistantTitle")}
+            description={t("timeTracking.assistantCardDescription")}
+          />
+        </AdminCardGrid>
+      </div>
 
       <TimeTrackingTable
-  projects={projects}
-  projectWorkstreams={projectWorkstreams}
-  timeEntries={timeEntries}
-  defaultProjectId={timeEntries[0]?.projectId || projects[0]?.id || ""}
-  createTimeEntry={createTimeEntry}
-  deleteTimeEntry={deleteTimeEntry}
-/>
+        projects={data.projects}
+        projectWorkstreams={data.projectWorkstreams}
+        taskFamilies={data.taskFamilies}
+        defaultTaskFamilyId={data.defaultTaskFamilyId}
+        timeEntries={data.timeEntries}
+        defaultProjectId={data.defaultProjectId}
+        defaultProjectWorkstreamId={data.defaultProjectWorkstreamId}
+        createTimeEntry={createTimeEntry}
+        updateTimeEntry={updateTimeEntry}
+        deleteTimeEntry={deleteTimeEntry}
+      />
     </main>
   );
 }

@@ -1,59 +1,69 @@
-import { MainNav } from "@/components/MainNav";
 import { EventTypesTable } from "@/components/admin/EventTypesTable";
 import { pageStyle, h1Style } from "@/components/ui/layoutStyles";
+import { getEventTypeAdminRows } from "@/lib/domain/eventTypes/eventTypeQueries";
+import { translate } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server";
+import {
+  eventTypeError,
+  eventTypeOk,
+  parseEventTypeInput,
+  validateEventTypeInput,
+} from "@/lib/domain/eventTypes/eventTypeValidation";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+
+const EVENT_TYPES_PATH = "/admin/event-types";
 
 async function createEventType(formData: FormData) {
   "use server";
 
-  const code = String(formData.get("code") || "").trim().toUpperCase();
-  const name = String(formData.get("name") || "").trim();
-  const description = String(formData.get("description") || "").trim();
-  const sortOrder = Number(formData.get("sortOrder") || 100);
+  const input = parseEventTypeInput(formData);
 
   try {
-    if (!code || !name) {
-      return {
-        ok: false,
-        message: "Event type not added: code and name are required.",
-      };
-    }
-
-    const existing = await prisma.eventType.findFirst({
-      where: { code },
-    });
-
-    if (existing) {
-      return {
-        ok: false,
-        message: "Event type not added: already exists in database.",
-      };
-    }
+    const validation = await validateEventTypeInput(input);
+    if (validation) return validation;
 
     await prisma.eventType.create({
       data: {
-        code,
-        name,
-        description: description || null,
-        sortOrder: Number.isNaN(sortOrder) ? 100 : sortOrder,
+        ...input,
         isActive: true,
       },
     });
 
-    revalidatePath("/admin/event-types");
+    revalidatePath(EVENT_TYPES_PATH);
 
-    return {
-      ok: true,
-      message: "Event type created successfully.",
-    };
+    return eventTypeOk("Event type created successfully.");
   } catch (e) {
     console.error("Create event type error:", e);
 
-    return {
-      ok: false,
-      message: "Event type not added: database error.",
-    };
+    return eventTypeError("Event type not added: database error.");
+  }
+}
+
+async function updateEventType(formData: FormData) {
+  "use server";
+
+  const id = String(formData.get("id") || "");
+  const input = parseEventTypeInput(formData);
+
+  try {
+    if (!id) return eventTypeError("Event type not updated: missing id.");
+
+    const validation = await validateEventTypeInput(input, id);
+    if (validation) return validation;
+
+    await prisma.eventType.update({
+      where: { id },
+      data: input,
+    });
+
+    revalidatePath(EVENT_TYPES_PATH);
+
+    return eventTypeOk("Event type updated successfully.");
+  } catch (e) {
+    console.error("Update event type error:", e);
+
+    return eventTypeError("Event type not updated: database error.");
   }
 }
 
@@ -65,10 +75,15 @@ async function toggleEventType(formData: FormData) {
 
   try {
     if (!id) {
-      return {
-        ok: false,
-        message: "Event type not updated: missing record.",
-      };
+      return eventTypeError("Event type not updated: missing record.");
+    }
+
+    const existing = await prisma.eventType.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      return eventTypeError("Event type not updated: it no longer exists.");
     }
 
     const updated = await prisma.eventType.update({
@@ -78,21 +93,17 @@ async function toggleEventType(formData: FormData) {
       },
     });
 
-    revalidatePath("/admin/event-types");
+    revalidatePath(EVENT_TYPES_PATH);
 
-    return {
-      ok: true,
-      message: updated.isActive
+    return eventTypeOk(
+      updated.isActive
         ? "Event type activated successfully."
-        : "Event type deactivated successfully.",
-    };
+        : "Event type deactivated successfully."
+    );
   } catch (e) {
     console.error("Toggle event type error:", e);
 
-    return {
-      ok: false,
-      message: "Event type not updated: database error.",
-    };
+    return eventTypeError("Event type not updated: database error.");
   }
 }
 
@@ -103,10 +114,7 @@ async function deleteEventType(formData: FormData) {
 
   try {
     if (!id) {
-      return {
-        ok: false,
-        message: "Event type not deleted: missing record.",
-      };
+      return eventTypeError("Event type not deleted: missing record.");
     }
 
     const existing = await prisma.eventType.findUnique({
@@ -114,64 +122,51 @@ async function deleteEventType(formData: FormData) {
     });
 
     if (!existing) {
-      return {
-        ok: false,
-        message: "Event type not deleted: it no longer exists.",
-      };
+      return eventTypeError("Event type not deleted: it no longer exists.");
     }
 
     if (existing.isActive) {
-      return {
-        ok: false,
-        message: "Event type not deleted: active event types cannot be deleted.",
-      };
+      return eventTypeError("Event type not deleted: deactivate it first.");
     }
 
-    const usedInProjectEvent = await prisma.projectEvent.findFirst({
+    const milestoneCount = await prisma.projectEvent.count({
       where: { eventTypeId: id },
     });
 
-    if (usedInProjectEvent) {
-      return {
-        ok: false,
-        message: "Event type not deleted: it has been used in project milestones.",
-      };
+    if (milestoneCount > 0) {
+      return eventTypeError(
+        "Event type not deleted: it is already used by project milestones."
+      );
     }
 
     await prisma.eventType.delete({
       where: { id },
     });
 
-    revalidatePath("/admin/event-types");
+    revalidatePath(EVENT_TYPES_PATH);
 
-    return {
-      ok: true,
-      message: "Event type deleted successfully.",
-    };
+    return eventTypeOk("Event type deleted successfully.");
   } catch (e) {
     console.error("Delete event type error:", e);
 
-    return {
-      ok: false,
-      message: "Event type not deleted: database error.",
-    };
+    return eventTypeError("Event type not deleted: database error.");
   }
 }
 
 export default async function EventTypesPage() {
-  const eventTypes = await prisma.eventType.findMany({
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  });
+  const [locale, eventTypes] = await Promise.all([
+    getServerLocale(),
+    getEventTypeAdminRows(),
+  ]);
 
   return (
     <main style={pageStyle}>
-      <MainNav />
-
-      <h1 style={h1Style}>Event Types</h1>
+      <h1 style={h1Style}>{translate(locale, "admin.events.title")}</h1>
 
       <EventTypesTable
         eventTypes={eventTypes}
         createEventType={createEventType}
+        updateEventType={updateEventType}
         toggleEventType={toggleEventType}
         deleteEventType={deleteEventType}
       />

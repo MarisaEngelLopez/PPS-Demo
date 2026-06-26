@@ -1,58 +1,69 @@
-import { MainNav } from "@/components/MainNav";
 import { TaskFamiliesTable } from "@/components/admin/TaskFamiliesTable";
 import { pageStyle, h1Style } from "@/components/ui/layoutStyles";
+import { translate } from "@/lib/i18n/dictionaries";
+import { getTaskFamilyAdminRows } from "@/lib/domain/taskFamilies/taskFamilyQueries";
+import {
+  parseTaskFamilyInput,
+  taskFamilyError,
+  taskFamilyOk,
+  validateTaskFamilyInput,
+} from "@/lib/domain/taskFamilies/taskFamilyValidation";
 import { prisma } from "@/lib/prisma";
+import { getServerLocale } from "@/lib/i18n/server";
 import { revalidatePath } from "next/cache";
+
+const TASK_FAMILIES_PATH = "/admin/task-families";
 
 async function createTaskFamily(formData: FormData) {
   "use server";
 
-  const code = String(formData.get("code") || "").trim().toUpperCase();
-  const name = String(formData.get("name") || "").trim();
-  const description = String(formData.get("description") || "").trim();
-  const sortOrder = Number(formData.get("sortOrder") || 0);
+  const input = parseTaskFamilyInput(formData);
 
   try {
-    if (!code || !name) {
-      return {
-        ok: false,
-        message: "Task family not added: code and name are required.",
-      };
-    }
-
-    const existing = await prisma.taskFamily.findFirst({
-      where: { code },
-    });
-
-    if (existing) {
-      return {
-        ok: false,
-        message: "Task family not added: already exists in database.",
-      };
-    }
+    const validation = await validateTaskFamilyInput(input);
+    if (validation) return validation;
 
     await prisma.taskFamily.create({
       data: {
-        code,
-        name,
-        sortOrder,
+        ...input,
         isActive: true,
       },
     });
 
-    revalidatePath("/admin/task-families");
+    revalidatePath(TASK_FAMILIES_PATH);
 
-    return {
-      ok: true,
-      message: "Task family created successfully.",
-    };
+    return taskFamilyOk("Task family created successfully.");
   } catch (e) {
     console.error("Create task family error:", e);
 
-    return {
-      ok: false,
-      message: "Task family not added: database error.",
-    };
+    return taskFamilyError("Task family not added: database error.");
+  }
+}
+
+async function updateTaskFamily(formData: FormData) {
+  "use server";
+
+  const id = String(formData.get("id") || "");
+  const input = parseTaskFamilyInput(formData);
+
+  try {
+    if (!id) return taskFamilyError("Task family not updated: missing id.");
+
+    const validation = await validateTaskFamilyInput(input, id);
+    if (validation) return validation;
+
+    await prisma.taskFamily.update({
+      where: { id },
+      data: input,
+    });
+
+    revalidatePath(TASK_FAMILIES_PATH);
+
+    return taskFamilyOk("Task family updated successfully.");
+  } catch (e) {
+    console.error("Update task family error:", e);
+
+    return taskFamilyError("Task family not updated: database error.");
   }
 }
 
@@ -63,6 +74,14 @@ async function toggleTaskFamily(formData: FormData) {
   const current = String(formData.get("current")) === "true";
 
   try {
+    const existing = await prisma.taskFamily.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      return taskFamilyError("Task family not updated: it no longer exists.");
+    }
+
     const updated = await prisma.taskFamily.update({
       where: { id },
       data: {
@@ -70,21 +89,17 @@ async function toggleTaskFamily(formData: FormData) {
       },
     });
 
-    revalidatePath("/admin/task-families");
+    revalidatePath(TASK_FAMILIES_PATH);
 
-    return {
-      ok: true,
-      message: updated.isActive
+    return taskFamilyOk(
+      updated.isActive
         ? "Task family activated successfully."
-        : "Task family deactivated successfully.",
-    };
+        : "Task family deactivated successfully."
+    );
   } catch (e) {
     console.error("Toggle task family error:", e);
 
-    return {
-      ok: false,
-      message: "Task family not updated: database error.",
-    };
+    return taskFamilyError("Task family not updated: database error.");
   }
 }
 
@@ -99,56 +114,51 @@ async function deleteTaskFamily(formData: FormData) {
     });
 
     if (!existing) {
-      return {
-        ok: false,
-        message: "Task family not deleted: it no longer exists.",
-      };
+      return taskFamilyError("Task family not deleted: it no longer exists.");
     }
 
     if (existing.isActive) {
-      return {
-        ok: false,
-        message: "Task family not deleted: active task families cannot be deleted.",
-      };
+      return taskFamilyError("Task family not deleted: deactivate it first.");
     }
 
-    // Future-proof dependency check.
-    // Add concrete checks here once TaskFamily is linked to TimeEntry/Task records.
+    const timeEntryCount = await prisma.timeEntry.count({
+      where: { taskFamilyId: id },
+    });
+
+    if (timeEntryCount > 0) {
+      return taskFamilyError(
+        "Task family not deleted: it is already used by time entries."
+      );
+    }
 
     await prisma.taskFamily.delete({
       where: { id },
     });
 
-    revalidatePath("/admin/task-families");
+    revalidatePath(TASK_FAMILIES_PATH);
 
-    return {
-      ok: true,
-      message: "Task family deleted successfully.",
-    };
+    return taskFamilyOk("Task family deleted successfully.");
   } catch (e) {
     console.error("Delete task family error:", e);
 
-    return {
-      ok: false,
-      message: "Task family not deleted: database error.",
-    };
+    return taskFamilyError("Task family not deleted: database error.");
   }
 }
 
 export default async function TaskFamiliesPage() {
-  const taskFamilies = await prisma.taskFamily.findMany({
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  });
+  const [locale, taskFamilies] = await Promise.all([
+    getServerLocale(),
+    getTaskFamilyAdminRows(),
+  ]);
 
   return (
     <main style={pageStyle}>
-      <MainNav />
-
-      <h1 style={h1Style}>Task Families</h1>
+      <h1 style={h1Style}>{translate(locale, "admin.taskFamilies.title")}</h1>
 
       <TaskFamiliesTable
         taskFamilies={taskFamilies}
         createTaskFamily={createTaskFamily}
+        updateTaskFamily={updateTaskFamily}
         toggleTaskFamily={toggleTaskFamily}
         deleteTaskFamily={deleteTaskFamily}
       />

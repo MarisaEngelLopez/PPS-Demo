@@ -1,0 +1,35 @@
+export const EXECUTIVE_GANTT_OUTPUT_CONTRACT = {
+  title: "Project Cockpit & Gantt",
+  detailTitle: "Gantt Detail",
+  columns: {
+    phase: "Phase",
+    workstream: "Workstream / Event",
+    variance: "Variance",
+    timeline: "Timeline",
+  },
+  legend: [
+    "Grey = planned",
+    "Light blue = in progress",
+    "Blue = actual",
+    "Red = delay / today",
+  ],
+  colors: {
+    planned: "9CA3AF",
+    progress: "93C5FD",
+    actual: "2563EB",
+    delay: "EF4444",
+    completedMarker: "2563EB",
+    openMarker: "9CA3AF",
+    rowTrack: "F8FAFC",
+    phaseRow: "F1F5F9",
+    border: "E2E8F0",
+  },
+  ppt: {
+    rowsPerSlide: 10,
+    phaseX: 0.45,
+    workstreamX: 2.7,
+    varianceX: 5.1,
+    timelineX: 6.35,
+    timelineW: 6.5,
+  },
+} as const;

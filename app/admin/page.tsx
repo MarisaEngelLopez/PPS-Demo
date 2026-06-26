@@ -1,112 +1,91 @@
-import Link from "next/link";
-import { MainNav } from "@/components/MainNav";
-import { pageStyle, h1Style } from "@/components/ui/layoutStyles";
+import { AdminCardGrid, AdminCardLink } from "@/components/ui/AdminCardLink";
+import { h1Style, pageStyle } from "@/components/ui/layoutStyles";
+import { translate } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server";
 
-const cardStyle = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 12,
-  padding: 16,
-  background: "white",
-  textDecoration: "none",
-  color: "inherit",
-};
-
-const titleStyle = {
+const sectionTitleStyle = {
+  fontSize: 18,
   fontWeight: 600,
-  fontSize: 16,
-  marginBottom: 4,
+  marginBottom: 12,
 };
 
-const descStyle = {
-  fontSize: 13,
-  color: "#6b7280",
-};
+export default async function AdminPage() {
+  const locale = await getServerLocale();
+  const t = (key: Parameters<typeof translate>[1]) => translate(locale, key);
 
-export default function AdminPage() {
   return (
     <main style={pageStyle}>
-      <MainNav />
+      <h1 style={h1Style}>{t("pages.admin")}</h1>
 
-      <h1 style={h1Style}>Admin</h1>
-
-      {/* STRUCTURE */}
       <section style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
-          Structure
-        </h2>
+        <h2 style={sectionTitleStyle}>{t("pages.projectStructure")}</h2>
 
-        <div
-          style={{
-            display: "grid",
-            gap: 16,
-            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-          }}
-        >
-          <Link href="/admin/project-templates" style={cardStyle}>
-            <div style={titleStyle}>Project Templates</div>
-            <div style={descStyle}>
-              Define reusable workstream structures for faster project setup.
-            </div>
-          </Link>
-
-          <Link href="/admin/phases" style={cardStyle}>
-            <div style={titleStyle}>Phases</div>
-            <div style={descStyle}>
-              Define the main stages of a project lifecycle.
-            </div>
-          </Link>
-
-          <Link href="/admin/workstreams" style={cardStyle}>
-            <div style={titleStyle}>Workstreams</div>
-            <div style={descStyle}>
-              Break down delivery areas linked to phases.
-            </div>
-          </Link>
-
- <Link href="/admin/event-types" style={cardStyle}>
-            <div style={titleStyle}>Events</div>
-            <div style={descStyle}>
-              Define the main events of your project lifecycle.
-            </div>
-          </Link>
-
-        </div>
+        <AdminCardGrid>
+          <AdminCardLink
+            href="/admin/project-templates"
+            title={t("admin.projectTemplates.title")}
+            description={t("admin.projectTemplates.description")}
+          />
+          <AdminCardLink
+            href="/admin/phases"
+            title={t("admin.phases.title")}
+            description={t("admin.phases.description")}
+          />
+          <AdminCardLink
+            href="/admin/workstreams"
+            title={t("admin.workstreams.title")}
+            description={t("admin.workstreams.description")}
+          />
+          <AdminCardLink
+            href="/admin/event-types"
+            title={t("admin.events.title")}
+            description={t("admin.events.description")}
+          />
+        </AdminCardGrid>
       </section>
 
-      {/* CONFIGURATION */}
+      <section style={{ marginBottom: 32 }}>
+        <h2 style={sectionTitleStyle}>{t("pages.riskStructure")}</h2>
+
+        <AdminCardGrid>
+          <AdminCardLink
+            href="/admin/evidence-types"
+            title={t("admin.evidenceTypes.title")}
+            description={t("admin.evidenceTypes.description")}
+          />
+        </AdminCardGrid>
+      </section>
+
       <section>
-        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
-          Configuration
-        </h2>
+        <h2 style={sectionTitleStyle}>{t("pages.businessAdmin")}</h2>
 
-        <div
-          style={{
-            display: "grid",
-            gap: 16,
-            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-          }}
-        >
-          <Link href="/admin/task-families" style={cardStyle}>
-            <div style={titleStyle}>Task Families</div>
-            <div style={descStyle}>
-              Group recurring types of work for tracking and reporting.
-            </div>
-          </Link>
-
-          <Link href="/admin/projectTypes" style={cardStyle}>
-            <div style={titleStyle}>Project Types</div>
-            <div style={descStyle}>
-              Define standard project structures and templates.
-            </div>
-          </Link>
-
-          <Link href="/admin/statuses" style={cardStyle}>
-            <div style={titleStyle}>Project Statuses</div>
-            <div style={descStyle}>
-              Manage lifecycle states such as Active, On Hold, Completed.
-            </div>
-          </Link>
-        </div>
+        <AdminCardGrid>
+          <AdminCardLink
+            href="/admin/task-families"
+            title={t("admin.taskFamilies.title")}
+            description={t("admin.taskFamilies.description")}
+          />
+          <AdminCardLink
+            href="/admin/projectTypes"
+            title={t("admin.projectTypes.title")}
+            description={t("admin.projectTypes.description")}
+          />
+          <AdminCardLink
+            href="/admin/statuses"
+            title={t("admin.statuses.title")}
+            description={t("admin.statuses.description")}
+          />
+          <AdminCardLink
+            href="/admin/status-scopes"
+            title={t("admin.statusScopes.title")}
+            description={t("admin.statusScopes.description")}
+          />
+          <AdminCardLink
+            href="/admin/status-usage"
+            title={t("admin.statusUsage.title")}
+            description={t("admin.statusUsage.description")}
+          />
+        </AdminCardGrid>
       </section>
     </main>
   );

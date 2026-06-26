@@ -1,24 +1,129 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { tableStyle, thStyle, tdStyle } from "@/components/ui/tableStyles";
-import { h1Style, buttonStyle } from "@/components/ui/layoutStyles";
+import { useTranslation } from "@/components/i18n/TranslationProvider";
+import { StandardTable } from "@/components/ui/TablePrimitives";
+import { thStyle, tdStyle } from "@/components/ui/tableStyles";
+import { h1Style, sectionHeaderStyle,
+  sectionTitleStyle } from "@/components/ui/layoutStyles";
+import {
+  SectionHeaderActionButton,
+  SectionHeaderActions,
+} from "@/components/ui/SectionHeader";
 
-type ProjectTimelineProps = {
-  projectWorkstreams: any[];
- projectEvents?: any[];
+type DateValue = Date | string | null | undefined;
+
+type TimelineTask = {
+  id: string;
+  name: string;
+  reportingName?: string | null;
+  visibility?: string | null;
+  plannedStartDate?: DateValue;
+  plannedEndDate?: DateValue;
+  actualStartDate?: DateValue;
+  actualEndDate?: DateValue;
+  subtasks?: TimelineTask[];
 };
 
-function toDate(value: any): Date | null {
+type TimelineWorkstream = {
+  id: string;
+  isActive?: boolean | null;
+  reportingName?: string | null;
+  customName?: string | null;
+  visibility?: string | null;
+  plannedStartDate?: DateValue;
+  plannedEndDate?: DateValue;
+  actualStartDate?: DateValue;
+  actualEndDate?: DateValue;
+  workstream?: {
+    name?: string | null;
+    phase?: { name?: string | null } | null;
+  } | null;
+  projectTasks?: TimelineTask[];
+};
+
+type TimelineEvent = {
+  id: string;
+  isActive?: boolean | null;
+  name?: string | null;
+  customName?: string | null;
+  reportingName?: string | null;
+  visibility?: string | null;
+  eventDate?: DateValue;
+  linkedProjectWorkstreamId?: string | null;
+  actualDate?: DateValue;
+  completedAt?: DateValue;
+  isCompleted?: boolean | null;
+  eventType?: { name?: string | null } | null;
+};
+
+type TimelineItem = {
+  visibility?: string | null;
+  plannedStartDate?: DateValue;
+  plannedEndDate?: DateValue;
+  actualStartDate?: DateValue;
+  actualEndDate?: DateValue;
+};
+
+type ProjectTimelineProps = {
+  projectWorkstreams: TimelineWorkstream[];
+ projectEvents?: TimelineEvent[];
+};
+
+type TimelineViewMode = "ALL" | "EXECUTIVE" | "DETAILED";
+
+function toDate(value: DateValue): Date | null {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function formatDate(value: any): string {
+function formatDate(value: DateValue): string {
   const date = toDate(value);
   if (!date) return "-";
   return date.toISOString().slice(0, 10);
+}
+
+function getWorkstreamDisplayName(pw: TimelineWorkstream) {
+  return (
+    pw.reportingName?.trim() ||
+    pw.customName?.trim() ||
+    pw.workstream?.name ||
+    "-"
+  );
+}
+
+function getTaskDisplayName(task: TimelineTask) {
+  return task.reportingName?.trim() || task.name || "-";
+}
+
+function getEventDisplayName(event: TimelineEvent) {
+  return (
+    event.reportingName?.trim() ||
+    event.customName?.trim() ||
+    event.name ||
+    event.eventType?.name ||
+    "Milestone"
+  );
+}
+
+function isVisibleInTimeline(item: { visibility?: string | null }, mode: TimelineViewMode) {
+  const visibility = item.visibility ?? "BOTH";
+
+  if (visibility === "HIDDEN") return false;
+  if (mode === "ALL") return true;
+  if (mode === "EXECUTIVE") {
+    return visibility === "BOTH" || visibility === "EXECUTIVE";
+  }
+  if (mode === "DETAILED") {
+    return visibility === "BOTH" || visibility === "DETAILED";
+  }
+
+  return true;
+}
+
+function isActiveTimelineItem(item: { isActive?: boolean | null }) {
+  return item.isActive !== false;
 }
 
 function getTodayDate() {
@@ -61,7 +166,7 @@ function getWorkingDaysBetween(start: Date, end: Date) {
   return count;
 }
 
-function getTimelineBounds(projectWorkstreams: any[], today: Date, projectEvents: any[] = []) {
+function getTimelineBounds(projectWorkstreams: TimelineWorkstream[], today: Date, projectEvents: TimelineEvent[] = []) {
   const dates: Date[] = [];
 
   projectWorkstreams.forEach((pw) => {
@@ -80,6 +185,40 @@ function getTimelineBounds(projectWorkstreams: any[], today: Date, projectEvents
     if (plannedEnd && !pw.actualEndDate && today > plannedEnd) {
       dates.push(today);
     }
+
+    (pw.projectTasks ?? []).forEach((task) => {
+      [
+        task.plannedStartDate,
+        task.plannedEndDate,
+        task.actualStartDate,
+        task.actualEndDate,
+      ].forEach((value) => {
+        const date = toDate(value);
+        if (date) dates.push(date);
+      });
+
+      const taskPlannedEnd = toDate(task.plannedEndDate);
+      if (taskPlannedEnd && !task.actualEndDate && today > taskPlannedEnd) {
+        dates.push(today);
+      }
+
+      (task.subtasks ?? []).forEach((subtask) => {
+        [
+          subtask.plannedStartDate,
+          subtask.plannedEndDate,
+          subtask.actualStartDate,
+          subtask.actualEndDate,
+        ].forEach((value) => {
+          const date = toDate(value);
+          if (date) dates.push(date);
+        });
+
+        const subtaskPlannedEnd = toDate(subtask.plannedEndDate);
+        if (subtaskPlannedEnd && !subtask.actualEndDate && today > subtaskPlannedEnd) {
+          dates.push(today);
+        }
+      });
+    });
   });
 
 projectEvents.forEach((event) => {
@@ -131,7 +270,7 @@ function getMonthGroups(weeks: Date[]) {
   return groups;
 }
 
-function getBarStyle(startValue: any, endValue: any, min: Date, max: Date) {
+function getBarStyle(startValue: DateValue, endValue: DateValue, min: Date, max: Date) {
   const start = toDate(startValue);
   const end = toDate(endValue);
 
@@ -160,7 +299,7 @@ function getTodayStyle(today: Date, min: Date, max: Date) {
   return { left: `${left}%` };
 }
 
-function getEventStyle(eventDate: any, min: Date, max: Date) {
+function getEventStyle(eventDate: DateValue, min: Date, max: Date) {
   const date = toDate(eventDate);
   if (!date || date < min || date > max) return { display: "none" };
 
@@ -172,8 +311,8 @@ function getEventStyle(eventDate: any, min: Date, max: Date) {
   return { left: `${left}%` };
 }
 
-function groupByPhase(projectWorkstreams: any[]) {
-  const groups: Record<string, any[]> = {};
+function groupByPhase(projectWorkstreams: TimelineWorkstream[]) {
+  const groups: Record<string, TimelineWorkstream[]> = {};
 
   projectWorkstreams.forEach((pw) => {
     const phaseName = pw.workstream?.phase?.name ?? "No Phase";
@@ -185,7 +324,17 @@ function groupByPhase(projectWorkstreams: any[]) {
   return groups;
 }
 
-function getVarianceLabel(pw: any, today: Date) {
+function getUnlinkedEvents(projectEvents: TimelineEvent[]) {
+  return projectEvents.filter((event) => !event.linkedProjectWorkstreamId);
+}
+
+function getEventsForWorkstream(projectEvents: TimelineEvent[], projectWorkstreamId: string) {
+  return projectEvents.filter(
+    (event) => event.linkedProjectWorkstreamId === projectWorkstreamId
+  );
+}
+
+function getVarianceLabel(pw: TimelineItem, today: Date) {
   const plannedStart = toDate(pw.plannedStartDate);
   const plannedEnd = toDate(pw.plannedEndDate);
   const actualStart = toDate(pw.actualStartDate);
@@ -218,7 +367,7 @@ function getVarianceLabel(pw: any, today: Date) {
   return { label: "Review", background: "#fef3c7", daysDelayed: null };
 }
 
-function getPhaseSummary(items: any[], today: Date) {
+function getPhaseSummary(items: TimelineWorkstream[], today: Date) {
   const plannedStarts = items
     .map((pw) => toDate(pw.plannedStartDate))
     .filter(Boolean) as Date[];
@@ -376,20 +525,11 @@ const milestoneDotStyle: React.CSSProperties = {
   borderRadius: "999px",
 };
 
-const milestoneLabelStyle: React.CSSProperties = {
-  position: "absolute",
-  top: "16px",
-  left: "6px",
-  fontSize: "0.68rem",
-  whiteSpace: "nowrap",
-  color: "#334155",
-};
-
 function TimelineMilestoneMarker({
   event,
   bounds,
 }: {
-  event: any;
+  event: TimelineEvent;
   bounds: { min: Date; max: Date };
 }) {
   const isCompleted = Boolean(
@@ -405,9 +545,7 @@ function TimelineMilestoneMarker({
         ...getEventStyle(event.eventDate, bounds.min, bounds.max),
         background: color,
       }}
-      title={`${event.eventType?.name ?? event.name ?? "Milestone"}: ${formatDate(
-        event.eventDate
-      )}`}
+      title={`${getEventDisplayName(event)}: ${formatDate(event.eventDate)}`}
     >
       <div
         style={{
@@ -456,10 +594,10 @@ function TimelineBars({
   bounds,
   labelPrefix,
 }: {
-  plannedStartDate: any;
-  plannedEndDate: any;
-  actualStartDate: any;
-  actualEndDate: any;
+  plannedStartDate: DateValue;
+  plannedEndDate: DateValue;
+  actualStartDate: DateValue;
+  actualEndDate: DateValue;
   today: Date;
   bounds: { min: Date; max: Date };
   labelPrefix: string;
@@ -518,16 +656,46 @@ function TimelineBars({
 
 export function ProjectTimeline({ projectWorkstreams,
   projectEvents = [], }: ProjectTimelineProps) {
+  const { t } = useTranslation();
   const [today] = useState<Date>(() => getTodayDate());
 
+const [viewMode, setViewMode] = useState<TimelineViewMode>("ALL");
+
+const activeProjectWorkstreams = useMemo(
+  () => projectWorkstreams.filter(isActiveTimelineItem),
+  [projectWorkstreams]
+);
+
+const activeWorkstreamIds = useMemo(
+  () => new Set(activeProjectWorkstreams.map((workstream) => workstream.id)),
+  [activeProjectWorkstreams]
+);
+
+const visibleProjectEvents = useMemo(
+  () =>
+    projectEvents.filter(
+      (event) =>
+        isActiveTimelineItem(event) &&
+        isVisibleInTimeline(event, viewMode) &&
+        (!event.linkedProjectWorkstreamId ||
+          activeWorkstreamIds.has(event.linkedProjectWorkstreamId))
+    ),
+  [activeWorkstreamIds, projectEvents, viewMode]
+);
+
+const unlinkedProjectEvents = useMemo(
+  () => getUnlinkedEvents(visibleProjectEvents),
+  [visibleProjectEvents]
+);
+
   const grouped = useMemo(
-    () => groupByPhase(projectWorkstreams),
-    [projectWorkstreams]
+    () => groupByPhase(activeProjectWorkstreams),
+[activeProjectWorkstreams]
   );
 
   const bounds = useMemo(
-    () => getTimelineBounds(projectWorkstreams, today, projectEvents),
-  [projectWorkstreams, today, projectEvents]
+   () => getTimelineBounds(activeProjectWorkstreams, today, visibleProjectEvents),
+[activeProjectWorkstreams, today, visibleProjectEvents]
   );
 
   const [expandedPhases, setExpandedPhases] = useState<Record<string, boolean>>(
@@ -537,7 +705,10 @@ export function ProjectTimeline({ projectWorkstreams,
   if (!bounds) {
     return (
       <section style={{ marginTop: "2rem" }}>
-        <h2 style={h1Style}>Project Timeline</h2>
+
+ <div style={sectionHeaderStyle}>
+  <div style={sectionTitleStyle}>{t("pages.projectTimeline")}</div>
+</div>
         <p>No planned or actual dates have been entered yet.</p>
       </section>
     );
@@ -546,6 +717,12 @@ export function ProjectTimeline({ projectWorkstreams,
   const weeks = getWeeks(bounds.min, bounds.max);
   const monthGroups = getMonthGroups(weeks);
   const phaseNames = Object.keys(grouped);
+  const allPhasesExpanded =
+    phaseNames.length > 0 &&
+    phaseNames.every((phase) => expandedPhases[phase] ?? false);
+  const allPhasesCollapsed =
+    phaseNames.length === 0 ||
+    phaseNames.every((phase) => !(expandedPhases[phase] ?? false));
 
   function togglePhase(phaseName: string) {
     setExpandedPhases((current) => ({
@@ -562,36 +739,62 @@ export function ProjectTimeline({ projectWorkstreams,
 
   return (
     <section style={{ marginTop: "2rem" }}>
-      <h2 style={h1Style}>Project Timeline</h2>
+      <h2 style={h1Style}>{t("pages.projectTimeline")}</h2>
 
       <div style={{ marginBottom: "0.75rem", fontSize: "0.9rem" }}>
-        <strong>Range:</strong> {formatDate(bounds.min)} → {formatDate(bounds.max)}
-        <span style={{ marginLeft: "1rem" }}>Grey = planned</span>
-        <span style={{ marginLeft: "1rem" }}>Light blue = in progress</span>
-        <span style={{ marginLeft: "1rem" }}>Blue = actual</span>
-        <span style={{ marginLeft: "1rem" }}>Red = delay / today</span>
+        <strong>{t("timeline.range")}:</strong> {formatDate(bounds.min)} {"->"} {formatDate(bounds.max)}
+        <span style={{ marginLeft: "1rem" }}>{t("timeline.legend.planned")}</span>
+        <span style={{ marginLeft: "1rem" }}>{t("timeline.legend.inProgress")}</span>
+        <span style={{ marginLeft: "1rem" }}>{t("timeline.legend.actual")}</span>
+        <span style={{ marginLeft: "1rem" }}>{t("timeline.legend.delay")}</span>
       </div>
 
-      <div style={{ marginBottom: "1.75rem" }}>
-        <button
-          type="button"
-          onClick={() => setAllPhases(true)}
-          style={{ ...buttonStyle, marginRight: "0.5rem" }}
-        >
-          Expand all
-        </button>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: "0.75rem",
+          marginBottom: "1.75rem",
+        }}
+      >
+        <SectionHeaderActions>
+          <SectionHeaderActionButton
+            onClick={() => setAllPhases(true)}
+            inactive={allPhasesExpanded}
+            labelKey="actions.expandAll"
+          />
 
-        <button type="button" onClick={() => setAllPhases(false)} style={buttonStyle}>
-          Collapse all
-        </button>
+          <SectionHeaderActionButton
+            onClick={() => setAllPhases(false)}
+            inactive={allPhasesCollapsed}
+            labelKey="actions.collapseAll"
+          />
+        </SectionHeaderActions>
+
+        <SectionHeaderActions>
+          {(["ALL", "EXECUTIVE", "DETAILED"] as TimelineViewMode[]).map((mode) => (
+            <SectionHeaderActionButton
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              inactive={viewMode !== mode}
+            >
+              {mode === "ALL"
+                ? t("timeline.all")
+                : mode === "EXECUTIVE"
+                  ? t("timeline.executive")
+                  : t("timeline.detailed")}
+            </SectionHeaderActionButton>
+          ))}
+        </SectionHeaderActions>
       </div>
 
-      <table style={tableStyle}>
+      <StandardTable>
         <thead>
           <tr>
-            <th style={thStyle}>Phase</th>
-            <th style={thStyle}>Workstream / Event</th>
-            <th style={thStyle}>Variance</th>
+            <th style={thStyle}>{t("labels.phase")}</th>
+            <th style={thStyle}>{t("labels.workstreamEvent")}</th>
+            <th style={thStyle}>{t("labels.variance")}</th>
             <th style={thStyle}>
               <div
                 style={{
@@ -635,9 +838,8 @@ export function ProjectTimeline({ projectWorkstreams,
 
         <tbody>
 
-{projectEvents.length > 0 &&
-  projectEvents.map((event, index) => (
-    <tr key={event.id}>
+{unlinkedProjectEvents.length > 0 &&
+  unlinkedProjectEvents.map((event, index) => (    <tr key={`unlinked-event-${event.id}`}>
       <td
         style={{
           ...tdStyle,
@@ -650,8 +852,8 @@ export function ProjectTimeline({ projectWorkstreams,
       </td>
 
       <td style={tdStyle}>
-        {event.eventType?.name ?? event.name ?? "Milestone"}
-      </td>
+  {getEventDisplayName(event)}
+</td>
 
       <td style={tdStyle}></td>
 
@@ -667,6 +869,10 @@ export function ProjectTimeline({ projectWorkstreams,
           {Object.entries(grouped).map(([phaseName, items]) => {
             const phaseSummary = getPhaseSummary(items, today);
             const isExpanded = expandedPhases[phaseName] ?? false;
+            const visibleItems = items.filter((pw) =>
+              isVisibleInTimeline(pw, viewMode)
+            );
+
 
             return (
               <Fragment key={phaseName}>
@@ -731,14 +937,17 @@ export function ProjectTimeline({ projectWorkstreams,
                   </td>
                 </tr>
 
+
                 {isExpanded &&
-                  items.map((pw: any) => {
+                  visibleItems.map((pw) => {
                     const variance = getVarianceLabel(pw, today);
+                    const visibleTasks = getVisibleTasks(pw, viewMode);
 
                     return (
-                      <tr key={pw.id}>
+                      <Fragment key={`workstream-${pw.id}`}>
+                      <tr>
                         <td style={tdStyle}></td>
-                        <td style={tdStyle}>{pw.workstream?.name ?? "-"}</td>
+                       <td style={tdStyle}>{getWorkstreamDisplayName(pw)}</td>
 
                         <td
                           style={{
@@ -773,18 +982,131 @@ export function ProjectTimeline({ projectWorkstreams,
                               actualEndDate={pw.actualEndDate}
                               today={today}
                               bounds={bounds}
-                              labelPrefix="Workstream"
+                              labelPrefix={getWorkstreamDisplayName(pw)}
                             />
+{getEventsForWorkstream(visibleProjectEvents, pw.id).map((event) => (
+  <TimelineMilestoneMarker key={`workstream-event-${pw.id}-${event.id}`} event={event} bounds={bounds} />
+))}
                           </div>
                         </td>
                       </tr>
+                      {visibleTasks.map((task) => {
+                        const taskVariance = getVarianceLabel(task, today);
+                        const visibleSubtasks = getVisibleSubtasks(task, viewMode);
+
+                        return (
+                          <Fragment key={`task-${task.id}`}>
+                            <tr>
+                              <td style={tdStyle}></td>
+                              <td style={{ ...tdStyle, paddingLeft: "1.5rem" }}>
+                                Task: {getTaskDisplayName(task)}
+                              </td>
+                              <td
+                                style={{
+                                  ...tdStyle,
+                                  background: taskVariance.background,
+                                  fontWeight: "bold",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {taskVariance.label}
+                                {taskVariance.daysDelayed ? (
+                                  <span
+                                    style={{
+                                      color: "#b91c1c",
+                                      fontWeight: "bold",
+                                      marginLeft: "0.5rem",
+                                    }}
+                                  >
+                                    {taskVariance.daysDelayed}d
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td style={tdStyle}>
+                                <div style={timelineCellStyle}>
+                                  <TimelineGrid weeks={weeks} today={today} bounds={bounds} />
+                                  <TimelineBars
+                                    plannedStartDate={task.plannedStartDate}
+                                    plannedEndDate={task.plannedEndDate}
+                                    actualStartDate={task.actualStartDate}
+                                    actualEndDate={task.actualEndDate}
+                                    today={today}
+                                    bounds={bounds}
+                                    labelPrefix={getTaskDisplayName(task)}
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                            {visibleSubtasks.map((subtask) => {
+                              const subtaskVariance = getVarianceLabel(subtask, today);
+
+                              return (
+                                <tr key={`subtask-${subtask.id}`}>
+                                  <td style={tdStyle}></td>
+                                  <td style={{ ...tdStyle, paddingLeft: "2.75rem" }}>
+                                    Subtask: {subtask.name}
+                                  </td>
+                                  <td
+                                    style={{
+                                      ...tdStyle,
+                                      background: subtaskVariance.background,
+                                      fontWeight: "bold",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    {subtaskVariance.label}
+                                    {subtaskVariance.daysDelayed ? (
+                                      <span
+                                        style={{
+                                          color: "#b91c1c",
+                                          fontWeight: "bold",
+                                          marginLeft: "0.5rem",
+                                        }}
+                                      >
+                                        {subtaskVariance.daysDelayed}d
+                                      </span>
+                                    ) : null}
+                                  </td>
+                                  <td style={tdStyle}>
+                                    <div style={timelineCellStyle}>
+                                      <TimelineGrid weeks={weeks} today={today} bounds={bounds} />
+                                      <TimelineBars
+                                        plannedStartDate={subtask.plannedStartDate}
+                                        plannedEndDate={subtask.plannedEndDate}
+                                        actualStartDate={subtask.actualStartDate}
+                                        actualEndDate={subtask.actualEndDate}
+                                        today={today}
+                                        bounds={bounds}
+                                        labelPrefix={subtask.name}
+                                      />
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </Fragment>
+                        );
+                      })}
+                      </Fragment>
                     );
                   })}
               </Fragment>
             );
           })}
         </tbody>
-      </table>
+      </StandardTable>
     </section>
+  );
+}
+
+function getVisibleTasks(pw: TimelineWorkstream, viewMode: TimelineViewMode) {
+  return (pw.projectTasks ?? []).filter((task) =>
+    isVisibleInTimeline(task, viewMode)
+  );
+}
+
+function getVisibleSubtasks(task: TimelineTask, viewMode: TimelineViewMode) {
+  return (task.subtasks ?? []).filter((subtask) =>
+    isVisibleInTimeline(subtask, viewMode)
   );
 }

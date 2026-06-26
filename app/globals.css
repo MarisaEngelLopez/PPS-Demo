@@ -3,6 +3,7 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -12,15 +13,113 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+input,
+select,
+textarea,
+button {
+  color-scheme: light;
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  background-color: #ffffff;
+  color: #111827;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  -webkit-text-fill-color: #111827;
+  opacity: 1;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #64748b;
+  -webkit-text-fill-color: #64748b;
+  opacity: 1;
+}
+
+select {
+  appearance: auto;
+  -webkit-appearance: menulist;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+.assistant-form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.responsive-table-shell {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.responsive-table-shell table {
+  min-width: 760px;
+}
+
+.desktop-main-nav {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.mobile-operational-nav,
+.mobile-only {
+  display: none !important;
+}
+
+@media (max-width: 720px) {
+  body {
+    min-width: 0;
+  }
+
+  .desktop-main-nav,
+  .mobile-hidden {
+    display: none !important;
+  }
+
+  .mobile-operational-nav {
+    display: flex !important;
+    padding: 0.5rem;
+    gap: 0.35rem;
+    flex-wrap: nowrap !important;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .mobile-only {
+    display: flex !important;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  textarea {
+    min-height: 88px;
+  }
+
+  .assistant-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-form-grid button {
+    width: 100%;
+    min-height: 40px;
+  }
 }

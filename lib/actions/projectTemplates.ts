@@ -46,7 +46,6 @@ export async function applyTemplateToProject(projectId: string, templateId: stri
       data: {
         projectId,
         workstreamId: tw.workstreamId,
-        statusId: tw.defaultStatusId,
         plannedStartDate,
         plannedEndDate,
         isActive: true,

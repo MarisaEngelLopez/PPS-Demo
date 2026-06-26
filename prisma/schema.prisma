@@ -28,6 +28,22 @@ enum HealthStatus {
   RED
 }
 
+enum AgentSourceType {
+  TEXT
+  VOICE
+}
+
+enum AgentApprovalMode {
+  AUTO_APPLY_DISABLED
+  MANUAL_APPROVAL
+  DELEGATED_APPROVAL
+}
+
+enum RiskAssessmentType {
+  INHERENT
+  RESIDUAL
+}
+
 model User {
   id                String       @id @default(uuid())
   email             String       @unique
@@ -36,11 +52,21 @@ model User {
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
-  managedProjects   Project[] @relation("ProjectManager")
-  sponsoredProjects Project[] @relation("ProjectSponsor")
+  ownedRisks        ProjectRisk[]
+  ownedRiskActions  ProjectRiskAction[]
+  riskAssessments   RiskAssessment[]
+  riskReviews       RiskReview[]
+  agentInstructions AgentInstruction[]            @relation("AgentInstructionUser")
+  agentApprovals    AgentApproval[]               @relation("AgentApprovalUser")
+  agentActionLogs   AgentActionLog[]              @relation("AgentActionLogUser")
+  agentConfigLogs   AgentConfigurationChangeLog[] @relation("AgentConfigurationChangeLogUser")
+  workSessions      WorkSession[]
+  ownedCustomerDna  CustomerDna[]                 @relation("CustomerDnaOwner")
+  createdCustomerDna CustomerDna[]                @relation("CustomerDnaCreatedBy")
+  createdExecutiveIntelligence ExecutiveIntelligence[] @relation("ExecutiveIntelligenceCreatedBy")
 }
 
-model ProjectStatus {
+model Status {
   id        String  @id @default(uuid())
   code      String  @unique
   name      String
@@ -48,8 +74,50 @@ model ProjectStatus {
   sortOrder Int     @default(100)
   isActive  Boolean @default(true)
 
-  projects           Project[]
-  projectWorkstreams ProjectWorkstream[]
+  usages                               StatusUsage[]
+  projectDecisions                     ProjectDecision[]
+  projectRisks                         ProjectRisk[]
+  projectRiskActions                   ProjectRiskAction[]
+  projectsWithGovernedStatus           Project[]
+  projectWorkstreamsWithGovernedStatus ProjectWorkstream[] @relation("ProjectWorkstreamGovernedStatus")
+  agentInstructions                    AgentInstruction[]
+  agentSuggestions                     AgentSuggestion[]
+  agentApprovals                       AgentApproval[]
+  workSessions                         WorkSession[]
+}
+
+model StatusUsage {
+  id        String  @id @default(cuid())
+  statusId  String
+  scopeId   String
+  sortOrder Int     @default(100)
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+
+  isOpen       Boolean @default(false)
+  isClosed     Boolean @default(false)
+  isInProgress Boolean @default(false)
+  isAttention  Boolean @default(false)
+  isPositive   Boolean @default(false)
+  isNegative   Boolean @default(false)
+
+  status Status      @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  scope  StatusScope @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+
+  @@unique([statusId, scopeId])
+  @@index([scopeId])
+  @@index([isActive])
+}
+
+model StatusScope {
+  id             String  @id @default(cuid())
+  code           String  @unique
+  name           String
+  sortOrder      Int     @default(100)
+  isActive       Boolean @default(true)
+  inheritDefault Boolean @default(true)
+
+  usages StatusUsage[]
 }
 
 model ProjectType {
@@ -73,9 +141,7 @@ model Project {
   description        String?
   descriptionEs      String?
   projectTypeId      String?
-  statusId           String
-  projectManagerId   String
-  sponsorId          String?
+  governedStatusId   String
   startDate          DateTime
   reportingCadence   ProjectCadence
   defaultLanguage    LanguageCode       @default(EN)
@@ -91,23 +157,50 @@ model Project {
   actualEndDate      DateTime?
 
   projectType        ProjectType?        @relation(fields: [projectTypeId], references: [id])
-  status             ProjectStatus       @relation(fields: [statusId], references: [id])
-  projectManager     User                @relation("ProjectManager", fields: [projectManagerId], references: [id])
-  sponsor            User?               @relation("ProjectSponsor", fields: [sponsorId], references: [id])
+  governedStatus     Status              @relation(fields: [governedStatusId], references: [id])
   projectWorkstreams ProjectWorkstream[]
-  events ProjectEvent[]
+  events             ProjectEvent[]
   timeEntries        TimeEntry[]
+  workSessions       WorkSession[]
+  agentInstructions  AgentInstruction[]
+  projectRisks       ProjectRisk[]
+  customerDnaItems   CustomerDna[]
+
+  issuerOrganizationId    String?
+  clientOrganizationId    String?
+  deliveryOrganizationId  String?
+  projectManagerContactId String?
+  sponsorContactId        String?
+
+  showIssuerLogo   Boolean @default(true)
+  showClientLogo   Boolean @default(true)
+  showDeliveryLogo Boolean @default(false)
+
+  issuerOrganization Organization? @relation("ProjectIssuerOrganization", fields: [issuerOrganizationId], references: [id], onDelete: SetNull)
+
+  clientOrganization Organization? @relation("ProjectClientOrganization", fields: [clientOrganizationId], references: [id], onDelete: SetNull)
+
+  deliveryOrganization Organization? @relation("ProjectDeliveryOrganization", fields: [deliveryOrganizationId], references: [id], onDelete: SetNull)
+
+  projectManagerContact OrganizationContact? @relation("ProjectManagerContact", fields: [projectManagerContactId], references: [id], onDelete: SetNull)
+
+  sponsorContact OrganizationContact? @relation("ProjectSponsorContact", fields: [sponsorContactId], references: [id], onDelete: SetNull)
+
+  reportingPacks   ProjectReportingPack[]
+  projectDecisions ProjectDecision[]
 }
 
 model TaskFamily {
-  id        String   @id @default(uuid())
-  code      String   @unique
-  name      String
-  nameEs    String?
-  isActive  Boolean  @default(true)
-  sortOrder Int      @default(100)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String        @id @default(uuid())
+  code         String        @unique
+  name         String
+  nameEs       String?
+  isActive     Boolean       @default(true)
+  sortOrder    Int           @default(100)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  timeEntries  TimeEntry[]
+  workSessions WorkSession[]
 }
 
 model Phase {
@@ -148,8 +241,21 @@ model ProjectWorkstream {
   workstreamId String
   workstream   Workstream @relation(fields: [workstreamId], references: [id])
 
-  statusId String?
-  status   ProjectStatus? @relation(fields: [statusId], references: [id])
+  governedStatusId String?
+  governedStatus   Status? @relation("ProjectWorkstreamGovernedStatus", fields: [governedStatusId], references: [id])
+
+  projectTasks ProjectTask[]
+
+  customName    String?
+  reportingName String?
+  objective     String?
+  deliverable   String?
+  visibility    String  @default("BOTH")
+
+  plannedQuantity Float?
+  actualQuantity  Float?
+  measureUnit     String?
+  quantityType    String?
 
   startDate DateTime?
   endDate   DateTime?
@@ -163,7 +269,15 @@ model ProjectWorkstream {
 
   isActive Boolean @default(true)
 
-  timeEntries TimeEntry[]
+  timeEntries  TimeEntry[]
+  workSessions WorkSession[]
+
+  linkedEvents ProjectEvent[]
+
+  projectRisks ProjectRisk[]
+
+  projectDecisions  ProjectDecision[]
+  agentInstructions AgentInstruction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -179,64 +293,918 @@ model ProjectTemplate {
 }
 
 model TemplateWorkstream {
-  id           String @id @default(uuid())
+  id String @id @default(uuid())
 
-  templateId   String
-  template     ProjectTemplate @relation(fields: [templateId], references: [id])
+  templateId String
+  template   ProjectTemplate @relation(fields: [templateId], references: [id])
 
   workstreamId String
   workstream   Workstream @relation(fields: [workstreamId], references: [id])
 
-  sortOrder         Int @default(0)
-  defaultStatusId   String?
+  sortOrder Int @default(0)
 
   plannedOffsetDays Int?
   durationDays      Int?
 }
 
 model ProjectEvent {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   projectId   String
   eventTypeId String?
 
-  name        String
-  eventDate   DateTime
-  isActive    Boolean  @default(true)
+  name                      String
+  customName                String?
+  reportingName             String?
+  description               String?
+  visibility                String  @default("BOTH")
+  linkedProjectWorkstreamId String?
 
-  project     Project   @relation(fields: [projectId], references: [id])
-  eventType   EventType? @relation(fields: [eventTypeId], references: [id])
+  plannedQuantity Float?
+  actualQuantity  Float?
+  measureUnit     String?
+  quantityType    String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
+  isCompleted    Boolean   @default(false)
+  completionDate DateTime?
 
-model EventType {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
-  description String?
-  sortOrder   Int      @default(100)
-  isActive    Boolean  @default(true)
+  eventDate DateTime
+  isActive  Boolean  @default(true)
 
-  projectEvents ProjectEvent[]
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model TimeEntry {
-  id String @id @default(uuid())
-
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id])
-
-  projectWorkstreamId String?
-  projectWorkstream   ProjectWorkstream? @relation(fields: [projectWorkstreamId], references: [id])
-
-  date        DateTime
-  hours       Float
-  description String?
+  project                 Project            @relation(fields: [projectId], references: [id])
+  eventType               EventType?         @relation(fields: [eventTypeId], references: [id])
+  linkedProjectWorkstream ProjectWorkstream? @relation(fields: [linkedProjectWorkstreamId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model EventType {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+  sortOrder   Int     @default(100)
+  isActive    Boolean @default(true)
+
+  projectEvents ProjectEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProjectTask {
+  id                  String @id @default(cuid())
+  projectWorkstreamId String
+
+  projectWorkstream ProjectWorkstream @relation(fields: [projectWorkstreamId], references: [id], onDelete: Cascade)
+
+  parentTaskId      String?
+  parentTask        ProjectTask?       @relation("ProjectTaskHierarchy", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  subtasks          ProjectTask[]      @relation("ProjectTaskHierarchy")
+  timeEntries       TimeEntry[]
+  workSessions      WorkSession[]
+  agentInstructions AgentInstruction[]
+
+  name          String
+  reportingName String?
+  description   String?
+  visibility    String  @default("BOTH")
+  sortOrder     Int     @default(0)
+
+  plannedStartDate DateTime?
+  plannedEndDate   DateTime?
+  actualStartDate  DateTime?
+  actualEndDate    DateTime?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectWorkstreamId])
+  @@index([parentTaskId])
+}
+
+model TimeEntry {
+  id                  String  @id @default(cuid())
+  projectId           String
+  projectWorkstreamId String
+  taskFamilyId        String
+  projectTaskId       String?
+
+  project            Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectWorkstream  ProjectWorkstream @relation(fields: [projectWorkstreamId], references: [id], onDelete: Cascade)
+  taskFamily         TaskFamily        @relation(fields: [taskFamilyId], references: [id])
+  projectTask        ProjectTask?      @relation(fields: [projectTaskId], references: [id], onDelete: SetNull)
+  sourceWorkSessions WorkSession[]     @relation("WorkSessionConvertedTimeEntry")
+
+  date  DateTime
+  hours Float
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([projectWorkstreamId])
+  @@index([taskFamilyId])
+  @@index([projectTaskId])
+}
+
+model AgentInstruction {
+  id         String          @id @default(cuid())
+  agentKey   String
+  sourceType AgentSourceType @default(TEXT)
+
+  userId String?
+  user   User?   @relation("AgentInstructionUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  statusId String
+  status   Status @relation(fields: [statusId], references: [id])
+
+  projectId           String?
+  projectWorkstreamId String?
+  projectTaskId       String?
+
+  project           Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectWorkstream ProjectWorkstream? @relation(fields: [projectWorkstreamId], references: [id], onDelete: SetNull)
+  projectTask       ProjectTask?       @relation(fields: [projectTaskId], references: [id], onDelete: SetNull)
+
+  rawInstruction        String
+  transcript            String?
+  normalizedInstruction String?
+  parsedIntentJson      String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  processedAt DateTime?
+
+  suggestions  AgentSuggestion[]
+  actionLogs   AgentActionLog[]
+  workSessions WorkSession[]
+
+  @@index([agentKey])
+  @@index([sourceType])
+  @@index([userId])
+  @@index([statusId])
+  @@index([projectId])
+  @@index([projectWorkstreamId])
+  @@index([projectTaskId])
+  @@index([createdAt])
+}
+
+model AgentDefinition {
+  id          String  @id @default(cuid())
+  agentKey    String  @unique
+  name        String
+  description String?
+  isEnabled   Boolean @default(true)
+  oneUserMode Boolean @default(true)
+  sortOrder   Int     @default(100)
+  isSystem    Boolean @default(true)
+
+  capabilities         AgentCapability[]
+  instructionTemplates AgentInstructionTemplate[]
+  sources              AgentSourceConfig[]
+  rules                AgentRule[]
+  configLogs           AgentConfigurationChangeLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isEnabled])
+  @@index([sortOrder])
+}
+
+model AgentInstructionTemplate {
+  id          String          @id @default(cuid())
+  agentId     String
+  agent       AgentDefinition @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  templateKey String
+  label       String
+  instruction String
+  sourceType  AgentSourceType @default(TEXT)
+  isDefault   Boolean         @default(false)
+  isEnabled   Boolean         @default(true)
+  sortOrder   Int             @default(100)
+  isSystem    Boolean         @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agentId, templateKey])
+  @@index([agentId])
+  @@index([sourceType])
+  @@index([isDefault])
+  @@index([isEnabled])
+}
+
+model AgentCapability {
+  id            String            @id @default(cuid())
+  agentId       String
+  agent         AgentDefinition   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  capabilityKey String
+  name          String
+  description   String?
+  targetEntity  String
+  isEnabled     Boolean           @default(true)
+  approvalMode  AgentApprovalMode @default(MANUAL_APPROVAL)
+  isProtected   Boolean           @default(false)
+  isSystem      Boolean           @default(true)
+  sortOrder     Int               @default(100)
+
+  rules       AgentRule[]
+  suggestions AgentSuggestion[]
+  configLogs  AgentConfigurationChangeLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agentId, capabilityKey])
+  @@index([agentId])
+  @@index([capabilityKey])
+  @@index([targetEntity])
+  @@index([isEnabled])
+  @@index([approvalMode])
+}
+
+model AgentSourceConfig {
+  id                       String          @id @default(cuid())
+  agentId                  String
+  agent                    AgentDefinition @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  sourceType               AgentSourceType
+  isEnabled                Boolean         @default(false)
+  transcriptReviewRequired Boolean         @default(true)
+  sortOrder                Int             @default(100)
+  isSystem                 Boolean         @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agentId, sourceType])
+  @@index([agentId])
+  @@index([sourceType])
+  @@index([isEnabled])
+}
+
+model AgentRule {
+  id           String           @id @default(cuid())
+  agentId      String
+  agent        AgentDefinition  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  capabilityId String?
+  capability   AgentCapability? @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+
+  ruleKey     String
+  name        String
+  description String?
+  value       String
+  valueType   String  @default("STRING")
+  isEditable  Boolean @default(true)
+  isProtected Boolean @default(false)
+  sortOrder   Int     @default(100)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agentId, capabilityId, ruleKey])
+  @@index([agentId])
+  @@index([capabilityId])
+  @@index([ruleKey])
+  @@index([isEditable])
+}
+
+model AgentConfigurationChangeLog {
+  id           String           @id @default(cuid())
+  agentId      String
+  agent        AgentDefinition  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  capabilityId String?
+  capability   AgentCapability? @relation(fields: [capabilityId], references: [id], onDelete: SetNull)
+
+  actorUserId String?
+  actorUser   User?   @relation("AgentConfigurationChangeLogUser", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  changeType String
+  beforeJson String?
+  afterJson  String?
+  createdAt  DateTime @default(now())
+
+  @@index([agentId])
+  @@index([capabilityId])
+  @@index([actorUserId])
+  @@index([changeType])
+  @@index([createdAt])
+}
+
+model AgentSuggestion {
+  id            String           @id @default(cuid())
+  instructionId String
+  instruction   AgentInstruction @relation(fields: [instructionId], references: [id], onDelete: Cascade)
+
+  agentKey       String
+  capabilityId   String?
+  capability     AgentCapability? @relation(fields: [capabilityId], references: [id], onDelete: SetNull)
+  suggestionType String
+  targetEntity   String
+  targetRecordId String?
+
+  statusId String
+  status   Status @relation(fields: [statusId], references: [id])
+
+  title              String
+  summary            String?
+  payloadJson        String
+  configSnapshotJson String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  appliedAt DateTime?
+
+  approvals             AgentApproval[]
+  actionLogs            AgentActionLog[]
+  convertedWorkSessions WorkSession[]    @relation("WorkSessionConvertedSuggestion")
+
+  @@index([instructionId])
+  @@index([capabilityId])
+  @@index([agentKey])
+  @@index([suggestionType])
+  @@index([targetEntity])
+  @@index([targetRecordId])
+  @@index([statusId])
+  @@index([createdAt])
+}
+
+model AgentApproval {
+  id           String          @id @default(cuid())
+  suggestionId String
+  suggestion   AgentSuggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+
+  approverUserId String?
+  approverUser   User?   @relation("AgentApprovalUser", fields: [approverUserId], references: [id], onDelete: SetNull)
+
+  statusId String
+  status   Status @relation(fields: [statusId], references: [id])
+
+  decisionNotes String?
+  decidedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  actionLogs AgentActionLog[]
+
+  @@index([suggestionId])
+  @@index([approverUserId])
+  @@index([statusId])
+  @@index([decidedAt])
+}
+
+model AgentActionLog {
+  id String @id @default(cuid())
+
+  instructionId String?
+  instruction   AgentInstruction? @relation(fields: [instructionId], references: [id], onDelete: SetNull)
+
+  suggestionId String?
+  suggestion   AgentSuggestion? @relation(fields: [suggestionId], references: [id], onDelete: SetNull)
+
+  approvalId String?
+  approval   AgentApproval? @relation(fields: [approvalId], references: [id], onDelete: SetNull)
+
+  workSessionId String?
+  workSession   WorkSession? @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
+
+  actorUserId String?
+  actorUser   User?   @relation("AgentActionLogUser", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  agentKey     String
+  actionType   String
+  message      String?
+  beforeJson   String?
+  afterJson    String?
+  metadataJson String?
+
+  createdAt DateTime @default(now())
+
+  @@index([instructionId])
+  @@index([suggestionId])
+  @@index([approvalId])
+  @@index([workSessionId])
+  @@index([actorUserId])
+  @@index([agentKey])
+  @@index([actionType])
+  @@index([createdAt])
+}
+
+model WorkSession {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  projectWorkstreamId String
+  projectWorkstream   ProjectWorkstream @relation(fields: [projectWorkstreamId], references: [id], onDelete: Cascade)
+
+  taskFamilyId String?
+  taskFamily   TaskFamily? @relation(fields: [taskFamilyId], references: [id], onDelete: SetNull)
+
+  projectTaskId String?
+  projectTask   ProjectTask? @relation(fields: [projectTaskId], references: [id], onDelete: SetNull)
+
+  statusId String
+  status   Status @relation(fields: [statusId], references: [id])
+
+  sourceInstructionId String?
+  sourceInstruction   AgentInstruction? @relation(fields: [sourceInstructionId], references: [id], onDelete: SetNull)
+
+  convertedSuggestionId String?
+  convertedSuggestion   AgentSuggestion? @relation("WorkSessionConvertedSuggestion", fields: [convertedSuggestionId], references: [id], onDelete: SetNull)
+
+  convertedTimeEntryId String?
+  convertedTimeEntry   TimeEntry? @relation("WorkSessionConvertedTimeEntry", fields: [convertedTimeEntryId], references: [id], onDelete: SetNull)
+
+  startedAt DateTime
+  endedAt   DateTime?
+
+  clientStartedAt DateTime?
+  clientEndedAt   DateTime?
+
+  activeSeconds            Int?
+  roundedMinutes           Int?
+  roundingIncrementMinutes Int  @default(15)
+
+  notes String?
+
+  pauses     WorkSessionPause[]
+  intervals  WorkSessionInterval[]
+  actionLogs AgentActionLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([projectWorkstreamId])
+  @@index([taskFamilyId])
+  @@index([projectTaskId])
+  @@index([statusId])
+  @@index([sourceInstructionId])
+  @@index([convertedSuggestionId])
+  @@index([convertedTimeEntryId])
+  @@index([startedAt])
+}
+
+model WorkSessionInterval {
+  id            String      @id @default(cuid())
+  workSessionId String
+  workSession   WorkSession @relation(fields: [workSessionId], references: [id], onDelete: Cascade)
+
+  startedAt DateTime
+  endedAt   DateTime?
+
+  clientStartedAt DateTime?
+  clientEndedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workSessionId])
+  @@index([startedAt])
+  @@index([endedAt])
+}
+
+model WorkSessionPause {
+  id            String      @id @default(cuid())
+  workSessionId String
+  workSession   WorkSession @relation(fields: [workSessionId], references: [id], onDelete: Cascade)
+
+  pausedAt        DateTime
+  resumedAt       DateTime?
+  clientPausedAt  DateTime?
+  clientResumedAt DateTime?
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workSessionId])
+  @@index([pausedAt])
+  @@index([resumedAt])
+}
+
+model RiskCategory {
+  id        String  @id @default(cuid())
+  code      String  @unique
+  name      String
+  nameEs    String?
+  sortOrder Int     @default(100)
+  isActive  Boolean @default(true)
+
+  projectRisks ProjectRisk[]
+}
+
+model EvidenceType {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+  sortOrder   Int     @default(100)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  riskActionEvidence RiskActionEvidence[]
+}
+
+model ProjectRisk {
+  id String @id @default(cuid())
+
+  projectId           String
+  projectWorkstreamId String?
+
+  categoryId String
+  statusId   String
+  ownerId    String?
+
+  riskCode String? @unique
+
+  title       String
+  description String?
+
+  probability Int @default(3)
+  impact      Int @default(3)
+  exposure    Int @default(9)
+
+  identifiedDate       DateTime?
+  targetResolutionDate DateTime?
+
+  mitigationPlan  String?
+  contingencyPlan String?
+  trigger         String?
+  notes           String?
+
+  escalated Boolean @default(false)
+  isActive  Boolean @default(true)
+
+  project           Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectWorkstream ProjectWorkstream? @relation(fields: [projectWorkstreamId], references: [id], onDelete: SetNull)
+
+  category    RiskCategory        @relation(fields: [categoryId], references: [id])
+  status      Status              @relation(fields: [statusId], references: [id])
+  owner       User?               @relation(fields: [ownerId], references: [id])
+  riskActions ProjectRiskAction[]
+  assessments RiskAssessment[]
+  reviews     RiskReview[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([projectWorkstreamId])
+  @@index([categoryId])
+  @@index([statusId])
+  @@index([ownerId])
+}
+
+model RiskReviewType {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+  sortOrder   Int     @default(100)
+  isActive    Boolean @default(true)
+
+  isInterim  Boolean @default(false)
+  isResidual Boolean @default(false)
+  isClosure  Boolean @default(false)
+
+  reviews RiskReview[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RiskReviewOutcome {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+  sortOrder   Int     @default(100)
+  isActive    Boolean @default(true)
+
+  isPending            Boolean @default(false)
+  isAccepted           Boolean @default(false)
+  isContinueMitigation Boolean @default(false)
+  isEscalated          Boolean @default(false)
+  isClosed             Boolean @default(false)
+
+  reviews RiskReview[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RiskReview {
+  id String @id @default(cuid())
+
+  riskId               String
+  residualAssessmentId String?
+  reviewTypeId         String
+  reviewOutcomeId      String
+  reviewedByUserId     String?
+
+  reviewDate DateTime
+  comments   String?
+
+  risk               ProjectRisk        @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  residualAssessment RiskAssessment?    @relation(fields: [residualAssessmentId], references: [id], onDelete: SetNull)
+  reviewType         RiskReviewType     @relation(fields: [reviewTypeId], references: [id])
+  reviewOutcome      RiskReviewOutcome  @relation(fields: [reviewOutcomeId], references: [id])
+  reviewedByUser     User?              @relation(fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  decisionLinks      RiskReviewDecisionLink[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([riskId])
+  @@index([residualAssessmentId])
+  @@index([reviewTypeId])
+  @@index([reviewOutcomeId])
+  @@index([reviewedByUserId])
+  @@index([reviewDate])
+}
+
+model RiskAssessment {
+  id             String             @id @default(cuid())
+  riskId         String
+  assessmentType RiskAssessmentType
+
+  probability Int
+  impact      Int
+  exposure    Int
+  comments    String?
+
+  assessedByUserId String?
+  assessedByUser   User?   @relation(fields: [assessedByUserId], references: [id], onDelete: SetNull)
+  assessmentDate   DateTime
+
+  risk ProjectRisk @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  riskReviews RiskReview[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([riskId])
+  @@index([assessmentType])
+  @@index([assessedByUserId])
+  @@index([assessmentDate])
+}
+
+model ProjectRiskAction {
+  id            String  @id @default(cuid())
+  projectRiskId String
+  actionCode    String? @unique
+
+  description String
+  ownerId     String?
+  dueDate     DateTime?
+
+  statusId  String
+  statusRef Status @relation(fields: [statusId], references: [id])
+
+  completionCriteria String?
+  evidence           String?
+  evidenceRecords    RiskActionEvidence[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projectRisk ProjectRisk @relation(fields: [projectRiskId], references: [id], onDelete: Cascade)
+  owner       User?       @relation(fields: [ownerId], references: [id])
+
+  @@index([projectRiskId])
+  @@index([ownerId])
+  @@index([statusId])
+}
+
+model RiskActionEvidence {
+  id             String @id @default(cuid())
+  riskActionId   String
+  evidenceTypeId String
+
+  title             String
+  description       String?
+  documentReference String?
+  url               String?
+  evidenceDate      DateTime?
+  uploadedBy        String?
+
+  riskAction   ProjectRiskAction @relation(fields: [riskActionId], references: [id], onDelete: Cascade)
+  evidenceType EvidenceType       @relation(fields: [evidenceTypeId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([riskActionId])
+  @@index([evidenceTypeId])
+  @@index([evidenceDate])
+}
+
+model Organization {
+  id               String  @id @default(cuid())
+  code             String? @unique
+  name             String
+  legalName        String?
+  displayName      String?
+  logoUrl          String?
+  website          String?
+  industry         String?
+  country          String?
+  organizationType String? // ISSUER | CLIENT | DELIVERY | PARTNER | INTERNAL
+  notes            String?
+  isActive         Boolean @default(true)
+
+  contacts OrganizationContact[]
+
+  issuerProjects   Project[] @relation("ProjectIssuerOrganization")
+  clientProjects   Project[] @relation("ProjectClientOrganization")
+  deliveryProjects Project[] @relation("ProjectDeliveryOrganization")
+  executiveIntelligenceItems ExecutiveIntelligence[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([organizationType])
+  @@index([isActive])
+}
+
+model OrganizationContact {
+  id             String @id @default(cuid())
+  organizationId String
+
+  name      String
+  roleTitle String?
+  email     String?
+  phone     String?
+  isSponsor Boolean @default(false)
+  notes     String?
+  isActive  Boolean @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  managedProjects   Project[] @relation("ProjectManagerContact")
+  sponsoredProjects Project[] @relation("ProjectSponsorContact")
+  executiveIntelligenceItems ExecutiveIntelligence[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([isSponsor])
+  @@index([isActive])
+}
+
+model CustomerDna {
+  id              String    @id @default(cuid())
+  projectId       String
+  category        String
+  priority        String
+  statement       String
+  status          String    @default("NOT_ADDRESSED")
+  ownerId         String?
+  lastReviewed    DateTime?
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner         User?   @relation("CustomerDnaOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdByUser User?   @relation("CustomerDnaCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([category])
+  @@index([priority])
+  @@index([status])
+  @@index([ownerId])
+  @@index([lastReviewed])
+}
+
+model ExecutiveIntelligence {
+  id              String    @id @default(cuid())
+  organizationId  String
+  contactId       String?
+  category        String
+  sensitivity     String    @default("INTERNAL")
+  confidence      String    @default("MEDIUM")
+  note            String
+  source          String?
+  visibility      String    @default("RESTRICTED")
+  lastReviewed    DateTime?
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact       OrganizationContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  createdByUser User?                @relation("ExecutiveIntelligenceCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([contactId])
+  @@index([category])
+  @@index([sensitivity])
+  @@index([confidence])
+  @@index([visibility])
+  @@index([lastReviewed])
+}
+
+model ProjectReportingPack {
+  id        String @id @default(cuid())
+  projectId String
+
+  title           String
+  reportingDate   DateTime
+  reportingPeriod String?
+  version         Int      @default(1)
+  status          String   @default("DRAFT") // DRAFT | READY | APPROVED | ARCHIVED
+
+  executiveSummary String?
+  achievements     String?
+  issues           String?
+  nextSteps        String?
+  managementAsk    String?
+  reportIndex      String?
+  conclusion       String?
+  isActive         Boolean @default(true)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([reportingDate])
+  @@index([status])
+}
+
+model ProjectDecision {
+  id String @id @default(cuid())
+
+  projectId           String
+  projectWorkstreamId String?
+
+  decisionCode   String? @unique
+  title          String
+  description    String?
+  recommendation String?
+  decision       String?
+
+  requestedBy String?
+  owner       String?
+
+  decisionDate DateTime?
+  dueDate      DateTime?
+
+  statusId  String
+  statusRef Status @relation(fields: [statusId], references: [id])
+
+  impact     String  @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  escalated  Boolean @default(false)
+  visibility String  @default("EXECUTIVE") // EXECUTIVE | BOTH | DETAILED | HIDDEN
+  notes      String?
+  isActive   Boolean @default(true)
+
+  project           Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectWorkstream ProjectWorkstream? @relation(fields: [projectWorkstreamId], references: [id], onDelete: SetNull)
+  riskReviewLinks   RiskReviewDecisionLink[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([projectWorkstreamId])
+  @@index([statusId])
+  @@index([impact])
+  @@index([dueDate])
+  @@index([escalated])
+  @@index([visibility])
+  @@index([isActive])
+}
+
+model RiskReviewDecisionLink {
+  id                String @id @default(cuid())
+  riskReviewId      String
+  projectDecisionId String
+
+  riskReview      RiskReview      @relation(fields: [riskReviewId], references: [id], onDelete: Cascade)
+  projectDecision ProjectDecision @relation(fields: [projectDecisionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([riskReviewId, projectDecisionId])
+  @@index([riskReviewId])
+  @@index([projectDecisionId])
 }
