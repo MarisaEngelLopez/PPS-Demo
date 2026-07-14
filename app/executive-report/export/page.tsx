@@ -263,6 +263,25 @@ function BriefingCard({ title, children, wide = false }: { title: string; childr
   );
 }
 
+function BriefingCockpitBlock({
+  title,
+  metrics,
+  locale,
+}: {
+  title: string;
+  metrics: CockpitMetric[];
+  locale: AppLocale;
+}) {
+  if (metrics.length === 0) return null;
+
+  return (
+    <div className="pdf-briefing-cockpit-block">
+      <div className="pdf-briefing-subtitle">{title}</div>
+      <PdfCockpitMetricGrid metrics={metrics} locale={locale} />
+    </div>
+  );
+}
+
 function NarrativePages({
   id,
   title,
@@ -581,7 +600,10 @@ export default async function ExecutiveReportExportPage({
       </div>
       <div className="pdf-briefing-grid">
         <BriefingCard title={t("report.executiveSummary")}><NarrativeBlock text={briefing.narratives.executiveSummary} mode="CHECKPOINTS" /></BriefingCard>
-        <BriefingCard title={locale === "es" ? "Estado de entrega" : "Delivery Status"}><PdfCockpitMetricGrid metrics={[...workstreamCockpitMetrics, ...milestoneCockpitMetrics].slice(0, 4)} locale={locale} /></BriefingCard>
+        <BriefingCard title={locale === "es" ? "Estado de entrega" : "Delivery Status"}>
+          <BriefingCockpitBlock title={locale === "es" ? "Actividades" : "Workstreams"} metrics={workstreamCockpitMetrics.slice(0, 2)} locale={locale} />
+          <BriefingCockpitBlock title={locale === "es" ? "Hitos" : "Milestones"} metrics={milestoneCockpitMetrics.slice(0, 2)} locale={locale} />
+        </BriefingCard>
         <BriefingCard title={locale === "es" ? "Pulso del proyecto" : "Project Pulse"}><div className="pdf-briefing-pulse">{briefing.pulse.map((item) => <div key={item.key}><span>{item.label}</span><strong>{item.value}</strong></div>)}</div></BriefingCard>
         <BriefingCard title={t("report.progressSinceLastReport")}><NarrativeBlock text={briefing.narratives.progressSinceLastReport} mode="BULLETS" /></BriefingCard>
         <BriefingCard title={locale === "es" ? "Riesgos" : "Risks"}><PdfCockpitMetricGrid metrics={riskCockpitMetrics} locale={locale} /></BriefingCard>
@@ -1040,6 +1062,9 @@ export default async function ExecutiveReportExportPage({
         .pdf-briefing-card .pdf-metric-card { min-height: 4.2mm; padding: 1px 2px; }
         .pdf-briefing-card .pdf-metric-label { font-size: 5.3px; line-height: 1; }
         .pdf-briefing-card .pdf-metric-value { font-size: 6.4px; line-height: 1; }
+        .pdf-briefing-cockpit-block { display: grid; gap: 2px; }
+        .pdf-briefing-cockpit-block + .pdf-briefing-cockpit-block { margin-top: 3px; }
+        .pdf-briefing-subtitle { color: #334155; font-size: 6px; font-weight: 800; letter-spacing: .04em; line-height: 1; text-transform: uppercase; }
         .pdf-briefing-pulse { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; font-size: 7px; }
         .pdf-briefing-pulse > div { display: flex; justify-content: space-between; gap: 3px; border-bottom: 1px solid #e2e8f0; padding: 2px; }
         .pdf-briefing-priority { display: grid; gap: 3px; font-size: 7px; line-height: 1.2; }

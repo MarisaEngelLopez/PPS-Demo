@@ -453,8 +453,18 @@ mode={detailedNarrativeMode("issues-concerns")} />
 
         <BriefingOperationalSection title={briefingText("Delivery Status", "Estado de entrega")} subtitle={briefingText("How is execution progressing?", "¿Cómo avanza la ejecución?")} href={`/projects/${project.id}?view=management#workstreams`}>
           <div style={{ display: "grid", gap: "0.45rem" }}>
-            <CockpitMetricGrid metrics={workstreamCockpitMetrics} />
-            <CockpitMetricGrid metrics={milestoneCockpitMetrics} />
+            <div style={{ display: "grid", gap: "0.2rem" }}>
+              <div style={{ color: "#334155", fontSize: "0.68rem", fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                {briefingText("Workstreams", "Actividades")}
+              </div>
+              <CockpitMetricGrid metrics={workstreamCockpitMetrics} />
+            </div>
+            <div style={{ display: "grid", gap: "0.2rem" }}>
+              <div style={{ color: "#334155", fontSize: "0.68rem", fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                {briefingText("Milestones", "Hitos")}
+              </div>
+              <CockpitMetricGrid metrics={milestoneCockpitMetrics} />
+            </div>
           </div>
         </BriefingOperationalSection>
 

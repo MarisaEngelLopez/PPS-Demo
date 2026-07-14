@@ -1270,6 +1270,81 @@ export async function createExecutiveReportPptx({
       rowOffset += Math.ceil(group.length / columns);
     });
   };
+  const addBriefingDeliveryMetricTiles = (
+    slide: pptxgen.Slide,
+    title: string,
+    groups: Array<{ title: string; metrics: BriefingMetricTile[] }>,
+    x: number,
+    y: number,
+    w: number,
+    h: number
+  ) => {
+    addBriefingCard(slide, title, "", x, y, w, h);
+    const visibleGroups = groups
+      .map((group) => ({ ...group, metrics: group.metrics.slice(0, 2) }))
+      .filter((group) => group.metrics.length > 0);
+    if (visibleGroups.length === 0) return;
+
+    const gap = 0.05;
+    const columns = 2;
+    const contentTop = y + 0.38;
+    const contentH = h - 0.46;
+    const groupGap = 0.04;
+    const groupH = (contentH - groupGap * Math.max(visibleGroups.length - 1, 0)) / visibleGroups.length;
+    const tileW = (w - 0.24 - gap) / columns;
+    const tileH = Math.min(0.2, Math.max(0.1, groupH - 0.16));
+
+    visibleGroups.forEach((group, groupIndex) => {
+      const groupY = contentTop + groupIndex * (groupH + groupGap);
+      slide.addText(group.title, {
+        x: x + 0.12,
+        y: groupY,
+        w: w - 0.24,
+        h: 0.1,
+        fontSize: 4.8,
+        bold: true,
+        color: COLORS.muted,
+        margin: 0,
+        fit: "shrink",
+      });
+      group.metrics.forEach((metric, index) => {
+        const tileX = x + 0.12 + index * (tileW + gap);
+        const tileY = groupY + 0.13;
+        slide.addShape("roundRect", {
+          x: tileX,
+          y: tileY,
+          w: tileW,
+          h: tileH,
+          rectRadius: 0.03,
+          fill: { color: metric.fill ?? COLORS.panel },
+          line: { color: metric.border ?? COLORS.border, width: 0.6 },
+        });
+        slide.addText(metric.label, {
+          x: tileX + 0.04,
+          y: tileY + 0.03,
+          w: tileW * 0.6,
+          h: Math.max(0.05, tileH - 0.04),
+          fontSize: 4.8,
+          bold: true,
+          color: COLORS.muted,
+          margin: 0,
+          fit: "shrink",
+        });
+        slide.addText(String(metric.value), {
+          x: tileX + tileW * 0.66,
+          y: tileY + 0.03,
+          w: tileW * 0.28,
+          h: Math.max(0.05, tileH - 0.04),
+          fontSize: 8.2,
+          bold: true,
+          color: COLORS.ink,
+          margin: 0,
+          align: "right",
+          fit: "shrink",
+        });
+      });
+    });
+  };
   const toBriefingMetricTiles = (metrics: CockpitMetric[]) =>
     sortCockpitMetrics(translateCockpitMetrics(metrics, t)).map((metric) => {
       const colors = cockpitMetricToneColors[metric.tone];
@@ -1328,7 +1403,8 @@ export async function createExecutiveReportPptx({
       row.markers.forEach((marker) => slide.addShape("ellipse", { x: gridX + gridW * marker.leftPct / 100 - 0.035, y: y + rowHeight * 0.35, w: 0.08, h: 0.08, fill: { color: marker.completed ? COLORS.blue : "9CA3AF" }, line: { color: marker.completed ? COLORS.blue : "9CA3AF" } }));
     });
     if (gantt?.todayLeftPct != null) slide.addShape("line", { x: gridX + gridW * gantt.todayLeftPct / 100, y: timelineHeaderTop - 0.02, w: 0, h: timelineBottom - timelineHeaderTop + 0.02, line: { color: "EF4444", width: 1, dashType: "dash" } });
-    const deliveryMetrics = toBriefingMetricTiles([...report.workstreamCockpitMetrics, ...report.milestoneCockpitMetrics].slice(0, 4));
+    const deliveryWorkstreamMetrics = toBriefingMetricTiles(report.workstreamCockpitMetrics);
+    const deliveryMilestoneMetrics = toBriefingMetricTiles(report.milestoneCockpitMetrics);
     const riskMetrics = toBriefingMetricTiles(report.riskCockpitMetrics);
     const decisionMetrics = toBriefingMetricTiles(report.decisionCockpitMetrics);
     const cards: Array<[string, string]> = [
@@ -1345,7 +1421,10 @@ export async function createExecutiveReportPptx({
       const x = 0.45 + (index % 4) * 3.12;
       const y = 3.84 + Math.floor(index / 4) * 1.06;
       if (index === 1) {
-        addBriefingMetricTiles(slide, title, deliveryMetrics, x, y, 2.98, 0.98);
+        addBriefingDeliveryMetricTiles(slide, title, [
+          { title: locale === "es" ? "ACTIVIDADES" : "WORKSTREAMS", metrics: deliveryWorkstreamMetrics },
+          { title: locale === "es" ? "HITOS" : "MILESTONES", metrics: deliveryMilestoneMetrics },
+        ], x, y, 2.98, 0.98);
       } else if (index === 2) {
         addBriefingMetricTiles(slide, title, briefing.pulse.map((item) => ({ label: item.label, value: item.value })), x, y, 2.98, 0.98);
       } else if (index === 4) {
