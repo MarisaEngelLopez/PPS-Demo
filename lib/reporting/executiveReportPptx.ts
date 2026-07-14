@@ -1284,21 +1284,18 @@ export async function createExecutiveReportPptx({
     if (visibleGroups.length === 0) return;
 
     const gap = 0.05;
-    const columns = 3;
     const contentTop = y + 0.38;
     const contentH = h - 0.46;
     const groupGap = 0.04;
-    const labelH = 0.08;
-    const totalRows = visibleGroups.reduce((sum, group) => sum + Math.ceil(group.metrics.length / columns), 0);
+    const cockpitTitleH = 0.08;
+    const groupTitleH = 0.08;
     const groupH = (contentH - groupGap * Math.max(visibleGroups.length - 1, 0)) / visibleGroups.length;
-    const tileW = (w - 0.24 - gap * (columns - 1)) / columns;
-    const tileH = Math.min(
-      0.1,
-      Math.max(
-        0.05,
-        (contentH - labelH * visibleGroups.length - groupGap * Math.max(visibleGroups.length - 1, 0) - gap * Math.max(totalRows - visibleGroups.length, 0)) / Math.max(totalRows, 1)
-      )
-    );
+    const lifecycleW = (w - 0.24) * 0.64;
+    const attentionW = (w - 0.24) * 0.3;
+    const attentionX = x + 0.12 + lifecycleW + 0.12;
+    const lifecycleTileW = (lifecycleW - gap) / 2;
+    const attentionTileW = attentionW;
+    const availableTileH = groupH - cockpitTitleH - groupTitleH - 0.04;
 
     visibleGroups.forEach((group, groupIndex) => {
       const groupY = contentTop + groupIndex * (groupH + groupGap);
@@ -1306,16 +1303,49 @@ export async function createExecutiveReportPptx({
         x: x + 0.12,
         y: groupY,
         w: w - 0.24,
-        h: labelH,
-        fontSize: 4.4,
+        h: cockpitTitleH,
+        fontSize: 4.3,
         bold: true,
         color: COLORS.muted,
         margin: 0,
         fit: "shrink",
       });
-      group.metrics.forEach((metric, index) => {
-        const tileX = x + 0.12 + (index % columns) * (tileW + gap);
-        const tileY = groupY + labelH + 0.02 + Math.floor(index / columns) * (tileH + gap);
+      const lifecycleMetrics = group.metrics.filter((metric) => metric.group !== "attention");
+      const attentionMetrics = group.metrics.filter((metric) => metric.group === "attention");
+      const maxRows = Math.max(
+        Math.ceil(lifecycleMetrics.length / 2),
+        Math.ceil(attentionMetrics.length / 1),
+        1
+      );
+      const tileH = Math.min(0.1, Math.max(0.045, (availableTileH - gap * Math.max(maxRows - 1, 0)) / maxRows));
+      const metricTop = groupY + cockpitTitleH + groupTitleH + 0.03;
+
+      slide.addText(t("metrics.lifecycle").toUpperCase(), {
+        x: x + 0.12,
+        y: groupY + cockpitTitleH + 0.01,
+        w: lifecycleW,
+        h: groupTitleH,
+        fontSize: 3.9,
+        bold: true,
+        color: COLORS.muted,
+        margin: 0,
+        fit: "shrink",
+      });
+      if (attentionMetrics.length > 0) {
+        slide.addText(t("metrics.attention").toUpperCase(), {
+          x: attentionX,
+          y: groupY + cockpitTitleH + 0.01,
+          w: attentionW,
+          h: groupTitleH,
+          fontSize: 3.9,
+          bold: true,
+          color: COLORS.muted,
+          margin: 0,
+          fit: "shrink",
+        });
+      }
+
+      const drawMetric = (metric: BriefingMetricTile, tileX: number, tileY: number, tileW: number) => {
         slide.addShape("roundRect", {
           x: tileX,
           y: tileY,
@@ -1326,11 +1356,11 @@ export async function createExecutiveReportPptx({
           line: { color: metric.border ?? COLORS.border, width: 0.6 },
         });
         slide.addText(metric.label, {
-          x: tileX + 0.04,
-          y: tileY + 0.02,
+          x: tileX + 0.03,
+          y: tileY + 0.015,
           w: tileW * 0.58,
           h: Math.max(0.05, tileH - 0.04),
-          fontSize: 3.8,
+          fontSize: 3.5,
           bold: true,
           color: COLORS.muted,
           margin: 0,
@@ -1338,16 +1368,26 @@ export async function createExecutiveReportPptx({
         });
         slide.addText(String(metric.value), {
           x: tileX + tileW * 0.64,
-          y: tileY + 0.02,
+          y: tileY + 0.015,
           w: tileW * 0.3,
           h: Math.max(0.05, tileH - 0.04),
-          fontSize: 5.8,
+          fontSize: 5.5,
           bold: true,
           color: COLORS.ink,
           margin: 0,
           align: "right",
           fit: "shrink",
         });
+      };
+
+      lifecycleMetrics.forEach((metric, index) => {
+        const tileX = x + 0.12 + (index % 2) * (lifecycleTileW + gap);
+        const tileY = metricTop + Math.floor(index / 2) * (tileH + gap);
+        drawMetric(metric, tileX, tileY, lifecycleTileW);
+      });
+      attentionMetrics.forEach((metric, index) => {
+        const tileY = metricTop + index * (tileH + gap);
+        drawMetric(metric, attentionX, tileY, attentionTileW);
       });
     });
   };

@@ -1070,8 +1070,12 @@ export default async function ExecutiveReportExportPage({
         .pdf-briefing-delivery { display: grid; gap: 2px; }
         .pdf-briefing-delivery .pdf-briefing-cockpit-block + .pdf-briefing-cockpit-block { margin-top: 0; }
         .pdf-briefing-delivery .pdf-briefing-subtitle { font-size: 5.2px; }
+        .pdf-briefing-delivery .pdf-cockpit-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, .8fr); column-gap: 3px; }
+        .pdf-briefing-delivery .pdf-metric-group-label { display: block; color: #64748b; font-size: 4.9px; font-weight: 800; letter-spacing: .04em; line-height: 1; margin-bottom: 1px; text-transform: uppercase; }
         .pdf-briefing-delivery .pdf-metric-group + .pdf-metric-group { margin-top: 1px; }
-        .pdf-briefing-delivery .pdf-metric-grid { gap: 1px; }
+        .pdf-briefing-delivery .pdf-metric-group + .pdf-metric-group { margin-top: 0; }
+        .pdf-briefing-delivery .pdf-metric-grid { gap: 1px; grid-template-columns: repeat(2, 1fr); }
+        .pdf-briefing-delivery .pdf-metric-group:nth-child(2) .pdf-metric-grid { grid-template-columns: 1fr; }
         .pdf-briefing-delivery .pdf-metric-card { min-height: 2.7mm; padding: 1px; }
         .pdf-briefing-delivery .pdf-metric-label { font-size: 4.2px; }
         .pdf-briefing-delivery .pdf-metric-value { font-size: 5.5px; }
