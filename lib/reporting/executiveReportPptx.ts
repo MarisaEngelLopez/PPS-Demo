@@ -1280,19 +1280,25 @@ export async function createExecutiveReportPptx({
     h: number
   ) => {
     addBriefingCard(slide, title, "", x, y, w, h);
-    const visibleGroups = groups
-      .map((group) => ({ ...group, metrics: group.metrics.slice(0, 2) }))
-      .filter((group) => group.metrics.length > 0);
+    const visibleGroups = groups.filter((group) => group.metrics.length > 0);
     if (visibleGroups.length === 0) return;
 
     const gap = 0.05;
-    const columns = 2;
+    const columns = 3;
     const contentTop = y + 0.38;
     const contentH = h - 0.46;
     const groupGap = 0.04;
+    const labelH = 0.08;
+    const totalRows = visibleGroups.reduce((sum, group) => sum + Math.ceil(group.metrics.length / columns), 0);
     const groupH = (contentH - groupGap * Math.max(visibleGroups.length - 1, 0)) / visibleGroups.length;
-    const tileW = (w - 0.24 - gap) / columns;
-    const tileH = Math.min(0.2, Math.max(0.1, groupH - 0.16));
+    const tileW = (w - 0.24 - gap * (columns - 1)) / columns;
+    const tileH = Math.min(
+      0.1,
+      Math.max(
+        0.05,
+        (contentH - labelH * visibleGroups.length - groupGap * Math.max(visibleGroups.length - 1, 0) - gap * Math.max(totalRows - visibleGroups.length, 0)) / Math.max(totalRows, 1)
+      )
+    );
 
     visibleGroups.forEach((group, groupIndex) => {
       const groupY = contentTop + groupIndex * (groupH + groupGap);
@@ -1300,16 +1306,16 @@ export async function createExecutiveReportPptx({
         x: x + 0.12,
         y: groupY,
         w: w - 0.24,
-        h: 0.1,
-        fontSize: 4.8,
+        h: labelH,
+        fontSize: 4.4,
         bold: true,
         color: COLORS.muted,
         margin: 0,
         fit: "shrink",
       });
       group.metrics.forEach((metric, index) => {
-        const tileX = x + 0.12 + index * (tileW + gap);
-        const tileY = groupY + 0.13;
+        const tileX = x + 0.12 + (index % columns) * (tileW + gap);
+        const tileY = groupY + labelH + 0.02 + Math.floor(index / columns) * (tileH + gap);
         slide.addShape("roundRect", {
           x: tileX,
           y: tileY,
@@ -1321,21 +1327,21 @@ export async function createExecutiveReportPptx({
         });
         slide.addText(metric.label, {
           x: tileX + 0.04,
-          y: tileY + 0.03,
-          w: tileW * 0.6,
+          y: tileY + 0.02,
+          w: tileW * 0.58,
           h: Math.max(0.05, tileH - 0.04),
-          fontSize: 4.8,
+          fontSize: 3.8,
           bold: true,
           color: COLORS.muted,
           margin: 0,
           fit: "shrink",
         });
         slide.addText(String(metric.value), {
-          x: tileX + tileW * 0.66,
-          y: tileY + 0.03,
-          w: tileW * 0.28,
+          x: tileX + tileW * 0.64,
+          y: tileY + 0.02,
+          w: tileW * 0.3,
           h: Math.max(0.05, tileH - 0.04),
-          fontSize: 8.2,
+          fontSize: 5.8,
           bold: true,
           color: COLORS.ink,
           margin: 0,
@@ -1424,7 +1430,7 @@ export async function createExecutiveReportPptx({
         addBriefingDeliveryMetricTiles(slide, title, [
           { title: locale === "es" ? "ACTIVIDADES" : "WORKSTREAMS", metrics: deliveryWorkstreamMetrics },
           { title: locale === "es" ? "HITOS" : "MILESTONES", metrics: deliveryMilestoneMetrics },
-        ], x, y, 2.98, 0.98);
+        ], x, y, 2.98, 1.06);
       } else if (index === 2) {
         addBriefingMetricTiles(slide, title, briefing.pulse.map((item) => ({ label: item.label, value: item.value })), x, y, 2.98, 0.98);
       } else if (index === 4) {

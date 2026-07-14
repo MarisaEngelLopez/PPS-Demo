@@ -601,8 +601,10 @@ export default async function ExecutiveReportExportPage({
       <div className="pdf-briefing-grid">
         <BriefingCard title={t("report.executiveSummary")}><NarrativeBlock text={briefing.narratives.executiveSummary} mode="CHECKPOINTS" /></BriefingCard>
         <BriefingCard title={locale === "es" ? "Estado de entrega" : "Delivery Status"}>
-          <BriefingCockpitBlock title={locale === "es" ? "Actividades" : "Workstreams"} metrics={workstreamCockpitMetrics.slice(0, 2)} locale={locale} />
-          <BriefingCockpitBlock title={locale === "es" ? "Hitos" : "Milestones"} metrics={milestoneCockpitMetrics.slice(0, 2)} locale={locale} />
+          <div className="pdf-briefing-delivery">
+            <BriefingCockpitBlock title={locale === "es" ? "Actividades" : "Workstreams"} metrics={workstreamCockpitMetrics} locale={locale} />
+            <BriefingCockpitBlock title={locale === "es" ? "Hitos" : "Milestones"} metrics={milestoneCockpitMetrics} locale={locale} />
+          </div>
         </BriefingCard>
         <BriefingCard title={locale === "es" ? "Pulso del proyecto" : "Project Pulse"}><div className="pdf-briefing-pulse">{briefing.pulse.map((item) => <div key={item.key}><span>{item.label}</span><strong>{item.value}</strong></div>)}</div></BriefingCard>
         <BriefingCard title={t("report.progressSinceLastReport")}><NarrativeBlock text={briefing.narratives.progressSinceLastReport} mode="BULLETS" /></BriefingCard>
@@ -1065,6 +1067,14 @@ export default async function ExecutiveReportExportPage({
         .pdf-briefing-cockpit-block { display: grid; gap: 2px; }
         .pdf-briefing-cockpit-block + .pdf-briefing-cockpit-block { margin-top: 3px; }
         .pdf-briefing-subtitle { color: #334155; font-size: 6px; font-weight: 800; letter-spacing: .04em; line-height: 1; text-transform: uppercase; }
+        .pdf-briefing-delivery { display: grid; gap: 2px; }
+        .pdf-briefing-delivery .pdf-briefing-cockpit-block + .pdf-briefing-cockpit-block { margin-top: 0; }
+        .pdf-briefing-delivery .pdf-briefing-subtitle { font-size: 5.2px; }
+        .pdf-briefing-delivery .pdf-metric-group + .pdf-metric-group { margin-top: 1px; }
+        .pdf-briefing-delivery .pdf-metric-grid { gap: 1px; }
+        .pdf-briefing-delivery .pdf-metric-card { min-height: 2.7mm; padding: 1px; }
+        .pdf-briefing-delivery .pdf-metric-label { font-size: 4.2px; }
+        .pdf-briefing-delivery .pdf-metric-value { font-size: 5.5px; }
         .pdf-briefing-pulse { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; font-size: 7px; }
         .pdf-briefing-pulse > div { display: flex; justify-content: space-between; gap: 3px; border-bottom: 1px solid #e2e8f0; padding: 2px; }
         .pdf-briefing-priority { display: grid; gap: 3px; font-size: 7px; line-height: 1.2; }
