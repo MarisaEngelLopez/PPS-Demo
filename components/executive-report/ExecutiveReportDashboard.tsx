@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "@/components/i18n/TranslationProvider";
 import { tableStyle, thStyle, tdStyle } from "@/components/ui/tableStyles";
 import { ExecutiveRiskAttentionTable } from "@/components/executive-report/ExecutiveRiskAttentionTable";
@@ -15,21 +16,30 @@ import {
   sectionHeaderStyle,
   sectionTitleStyle,
 } from "@/components/ui/layoutStyles";
+import { findManagedNarrativeAsset } from "@/lib/domain/narrative/narrativeRepository";
+import { resolveNarrativePresentationMode } from "@/lib/domain/narrative/narrativeDocument";
 import { buildExecutiveReportViewModel } from "@/lib/domain/reporting/executiveReportViewModel";
+import { buildExecutiveBriefingModel } from "@/lib/domain/reporting/executiveBriefingModel";
 import type {
   ExecutiveReportProject,
   ExecutiveReportReportingPack,
 } from "@/lib/domain/reporting/executiveReportTypes";
 import { getExecutiveReportSectionTitle } from "@/lib/reporting/executiveReportTranslations";
+import {
+  getNarrativePresentationItems,
+  type NarrativePresentationMode,
+} from "@/lib/domain/reporting/narrativePresentation";
 
 type Props = {
   project: ExecutiveReportProject;
   reportingPack?: ExecutiveReportReportingPack | null;
   riskReviewTypeHints?: string[];
   activeChapter?: ReportChapter;
+  embedded?: boolean;
 };
 
 export type ReportChapter =
+  | "briefing"
   | "overview"
   | "decisions"
   | "risks"
@@ -47,9 +57,15 @@ export default function ExecutiveReportDashboard({
   reportingPack,
   riskReviewTypeHints = [],
   activeChapter = "overview",
+  embedded = false,
 }: Props) {
-const { t } = useTranslation();
+const { t, locale } = useTranslation();
 
+const reportViewModel = buildExecutiveReportViewModel({
+  project,
+  reportingPack: reportingPack ?? null,
+  includeDraftNarratives: true,
+});
 const {
   executiveDecisionAttention,
   recentDecisionOutcomes,
@@ -62,9 +78,13 @@ const {
   riskCockpitMetrics,
   workstreamCockpitMetrics,
   milestoneCockpitMetrics,
-} = buildExecutiveReportViewModel({
+  narrativeAssets,
+} = reportViewModel;
+const briefing = buildExecutiveBriefingModel({
   project,
   reportingPack: reportingPack ?? null,
+  report: reportViewModel,
+  locale,
 });
 
 const [showSideIndex, setShowSideIndex] = useState(true);
@@ -74,7 +94,28 @@ const sectionTitle = (id: string) =>
     reportSections.find((section) => section.id === id) ?? { id, title: id },
     t
   );
+const detailedNarrativeAsset = (
+  objectKey:
+    | "executive-summary"
+    | "accomplishments"
+    | "issues-concerns"
+    | "next-steps"
+    | "management-ask"
+    | "conclusion"
+) =>
+  findManagedNarrativeAsset(narrativeAssets, {
+    objectKey,
+    variant: "DETAILED",
+  });
+const detailedNarrative = (objectKey: Parameters<typeof detailedNarrativeAsset>[0]) =>
+  detailedNarrativeAsset(objectKey)?.content ?? null;
+const detailedNarrativeMode = (objectKey: Parameters<typeof detailedNarrativeAsset>[0]) =>
+  resolveNarrativePresentationMode({
+    preference: detailedNarrativeAsset(objectKey)?.presentationMode,
+    objectKey,
+  });
 const chapterTabs: { key: ReportChapter; label: string }[] = [
+  { key: "briefing", label: t("report.tabBriefing") },
   { key: "overview", label: t("report.tabOverview") },
   { key: "decisions", label: t("report.tabDecisions") },
   { key: "risks", label: t("report.tabRisks") },
@@ -82,9 +123,10 @@ const chapterTabs: { key: ReportChapter; label: string }[] = [
   { key: "gantt", label: t("report.tabGantt") },
   { key: "narrative", label: t("report.tabNarrative") },
 ];
+const briefingText = (en: string, es: string) => (locale === "es" ? es : en);
 
   return (
-<div className="page-shell">
+<div className={`page-shell${embedded ? " embedded-executive-briefing" : ""}`}>
   <section className="section-panel highlighted-section-panel">
   <div
     style={{
@@ -349,19 +391,112 @@ const chapterTabs: { key: ReportChapter; label: string }[] = [
     <ReportNarrativeBlock
 id="executive-summary"
 title={t("report.executiveSummary")}
-text={reportingPack.executiveSummary}
+text={detailedNarrative("executive-summary")}
+mode={detailedNarrativeMode("executive-summary")}
 />
     <ReportNarrativeBlock
 id="achievements"
 title={t("report.achievements")}
-text={reportingPack.achievements}
+text={detailedNarrative("accomplishments")}
+mode={detailedNarrativeMode("accomplishments")}
 />
     <ReportNarrativeBlock
 id="issues"
 title={t("report.issuesConcerns")}
-text={reportingPack.issues} />
+text={detailedNarrative("issues-concerns")}
+mode={detailedNarrativeMode("issues-concerns")} />
 
     </>
+  )}
+
+  {activeChapter === "briefing" && (
+    <section
+      id="executive-briefing"
+      style={{
+        background: "#ffffff",
+        display: "grid",
+        gap: "0.8rem",
+      }}
+    >
+      <div style={{ borderBottom: "2px solid #2563eb", padding: "0 0 0.75rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "start", flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: "1.15rem", fontWeight: 800 }}>{t("report.executiveBriefing")}</div>
+            <div style={{ color: "#475569", marginTop: "0.2rem", maxWidth: "760px" }}>
+              {(locale === "es" ? project.descriptionEs : project.description) || project.description || "—"}
+            </div>
+          </div>
+          <HealthBadge value={project.healthStatus} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: "0.45rem", marginTop: "0.65rem" }}>
+          <BriefingFact label={briefingText("Current phase", "Fase actual")} value={briefing.currentPhase} />
+          <BriefingFact label={t("labels.projectManager")} value={project.projectManagerContact?.name ?? "—"} />
+          <BriefingFact label={t("labels.sponsorContact")} value={project.sponsorContact?.name ?? "—"} />
+          <BriefingFact label={briefingText("Last report", "Último informe")} value={reportingPack ? formatDate(reportingPack.reportingDate) : "—"} />
+        </div>
+      </div>
+
+      <BriefingOperationalSection title={briefingText("Phase Timeline", "Cronograma de fases")} subtitle={briefingText("Where are we in the project journey?", "¿En qué punto del recorrido del proyecto estamos?")} href={`/projects/${project.id}?view=management#workstreams`}>
+        <div style={{ maxWidth: "100%", overflowX: "auto" }}>
+          <ExecutiveTimelineGantt
+            projectWorkstreams={projectWorkstreams}
+            projectEvents={briefing.timelineEvents}
+            briefingMode
+          />
+        </div>
+      </BriefingOperationalSection>
+
+      <div className="briefing-content-grid">
+        <BriefingOperationalSection title={t("report.executiveSummary")} subtitle={briefingText("Overall project status and current management focus.", "Estado general del proyecto y foco actual de gestión.")}>
+          <BriefingNarrativeSection title="" text={briefing.narratives.executiveSummary} checkpoints />
+        </BriefingOperationalSection>
+
+        <BriefingOperationalSection title={briefingText("Delivery Status", "Estado de entrega")} subtitle={briefingText("How is execution progressing?", "¿Cómo avanza la ejecución?")} href={`/projects/${project.id}?view=management#workstreams`}>
+          <div style={{ display: "grid", gap: "0.45rem" }}>
+            <CockpitMetricGrid metrics={workstreamCockpitMetrics} />
+            <CockpitMetricGrid metrics={milestoneCockpitMetrics} />
+          </div>
+        </BriefingOperationalSection>
+
+        <BriefingOperationalSection title={briefingText("Project Pulse", "Pulso del proyecto")} subtitle={briefingText("What has changed since the previous reporting period?", "¿Qué ha cambiado desde el periodo de informe anterior?")}>
+          <BriefingMetricRow items={[
+            ...briefing.pulse.map((item) => [item.label, item.value] as [string, number]),
+          ]} />
+        </BriefingOperationalSection>
+
+        <BriefingOperationalSection title={t("report.progressSinceLastReport")} subtitle={briefingText("Major capabilities and business outcomes delivered.", "Principales capacidades y resultados de negocio entregados.")}>
+          <BriefingNarrativeSection title="" text={briefing.narratives.progressSinceLastReport} />
+        </BriefingOperationalSection>
+
+        <BriefingOperationalSection title={briefingText("Risks", "Riesgos")} subtitle={briefingText("What could threaten project success?", "¿Qué podría amenazar el éxito del proyecto?")} href="/risks">
+          {briefing.primaryRisk ? (
+            <PriorityItem title={briefing.primaryRisk.title} detail={`${briefingText("Exposure", "Exposición")}: ${briefing.primaryRisk.exposure ?? briefing.primaryRisk.probability * briefing.primaryRisk.impact}`} />
+          ) : <CockpitMetricGrid metrics={riskCockpitMetrics} />}
+        </BriefingOperationalSection>
+
+        <BriefingOperationalSection title={briefingText("Decisions", "Decisiones")} subtitle={briefingText("Which decisions require management?", "¿Qué decisiones requieren a dirección?")} href="/decisions">
+          {briefing.primaryDecision ? (
+            <PriorityItem title={briefing.primaryDecision.title} detail={briefing.primaryDecision.recommendation || briefingText("Executive action required", "Se requiere actuación ejecutiva")} />
+          ) : <CockpitMetricGrid metrics={decisionCockpitMetrics} />}
+        </BriefingOperationalSection>
+        <BriefingOperationalSection title={t("report.issuesConcerns")} subtitle={briefingText("Current concerns affecting project delivery.", "Preocupaciones actuales que afectan a la entrega.")}>
+          <BriefingNarrativeSection title="" text={briefing.narratives.issuesConcerns} />
+        </BriefingOperationalSection>
+        <BriefingOperationalSection title={t("report.nextSteps")} subtitle={briefingText("Planned activities for the next reporting period.", "Actividades previstas para el próximo periodo.")}>
+          <BriefingNarrativeSection title="" text={briefing.narratives.nextSteps} />
+        </BriefingOperationalSection>
+        <div className="briefing-half-row">
+          <BriefingOperationalSection title={t("report.managementAsk")} subtitle={briefingText("Management decisions or support required.", "Decisiones o apoyo requerido de dirección.")}>
+            <BriefingNarrativeSection title="" text={briefing.narratives.managementAsk} />
+          </BriefingOperationalSection>
+        </div>
+        <div className="briefing-half-row">
+          <BriefingOperationalSection title={t("report.conclusion")} subtitle={briefingText("Overall project assessment.", "Evaluación general del proyecto.")}>
+            <BriefingNarrativeSection title="" text={briefing.narratives.conclusion} checkpoints />
+          </BriefingOperationalSection>
+        </div>
+      </div>
+    </section>
   )}
 
   {activeChapter === "decisions" && (
@@ -641,17 +776,20 @@ id="decision-outcomes"
     <ReportNarrativeBlock
 id="next-steps"
 title={t("report.nextSteps")}
-text={reportingPack.nextSteps}
+text={detailedNarrative("next-steps")}
+mode={detailedNarrativeMode("next-steps")}
 />
     <ReportNarrativeBlock
 id="management-ask"
 title={t("report.managementAsk")}
-text={reportingPack.managementAsk}
+text={detailedNarrative("management-ask")}
+mode={detailedNarrativeMode("management-ask")}
 />
     <ReportNarrativeBlock
 id="conclusion"
 title={t("report.conclusion")}
-text={reportingPack.conclusion}
+text={detailedNarrative("conclusion")}
+mode={detailedNarrativeMode("conclusion")}
 />
   </section>
 )}
@@ -668,12 +806,15 @@ function ReportNarrativeBlock({
   id,
   title,
   text,
+  mode = "BULLETS",
 }: {
   id?: string;
   title: string;
   text?: string | null;
+  mode?: NarrativePresentationMode;
 }) {
   if (!text) return null;
+  const items = getNarrativePresentationItems(text, mode);
 
     return (
   <div id={id} style={{ marginBottom: "0.75rem" }}>
@@ -690,7 +831,6 @@ function ReportNarrativeBlock({
 
       <div
         style={{
-          whiteSpace: "pre-wrap",
           fontSize: "0.82rem",
           lineHeight: 1.45,
           color: "#111827",
@@ -698,11 +838,157 @@ function ReportNarrativeBlock({
           border: "1px solid #e2e8f0",
           borderRadius: "8px",
           padding: "0.65rem",
+          minHeight: mode === "CHECKPOINTS" ? "180px" : undefined,
+          display: "flex",
+          alignItems: mode === "CHECKPOINTS" ? "center" : "flex-start",
+          justifyContent: "center",
         }}
       >
-        {text}
+        <ul
+          style={{
+            listStyle: "none",
+            margin: 0,
+            padding: 0,
+            width: mode === "CHECKPOINTS" ? "min(760px, 90%)" : "100%",
+            display: "grid",
+            gap: mode === "CHECKPOINTS" ? "0.75rem" : "0.4rem",
+          }}
+        >
+          {items.map((item, index) => (
+            <li
+              key={`${item.text}-${index}`}
+              style={{
+                textAlign: "left",
+                fontSize: mode === "CHECKPOINTS" ? "0.95rem" : "0.82rem",
+                fontWeight: mode === "CHECKPOINTS" ? 600 : 400,
+              }}
+            >
+              <div style={{ display: "grid", gridTemplateColumns: "1.25rem 1fr", gap: "0.45rem" }}>
+                <span style={{ color: mode === "CHECKPOINTS" ? "#15803d" : "#475569", fontWeight: 800 }}>
+                  {mode === "CHECKPOINTS" ? "✓" : "•"}
+                </span>
+                <span>{item.text}</span>
+              </div>
+              {item.children.length > 0 && (
+                <ul style={{ listStyle: "none", margin: "0.35rem 0 0 1.7rem", padding: 0, display: "grid", gap: "0.25rem", fontWeight: 400 }}>
+                  {item.children.map((child, childIndex) => (
+                    <li key={`${child}-${childIndex}`} style={{ display: "grid", gridTemplateColumns: "1rem 1fr", gap: "0.35rem" }}>
+                      <span style={{ color: "#64748b" }}>◦</span>
+                      <span>{child}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
+  );
+}
+
+function BriefingOperationalSection({
+  title,
+  subtitle,
+  href,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  href?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section style={{ borderTop: "1px solid #cbd5e1", padding: "0.7rem 0 0.2rem", minWidth: 0 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "start", marginBottom: "0.5rem" }}>
+        <div>
+          <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#0f172a" }}>{title}</div>
+          <div style={{ color: "#64748b", fontSize: "0.72rem", marginTop: "0.12rem" }}>{subtitle}</div>
+        </div>
+        {href && <Link href={href} style={{ color: "#1d4ed8", fontSize: "0.72rem", fontWeight: 700, whiteSpace: "nowrap" }}>Open →</Link>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function BriefingFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ borderLeft: "2px solid #cbd5e1", paddingLeft: "0.45rem", minWidth: 0 }}>
+      <div style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: 700 }}>{label}</div>
+      <div style={{ color: "#0f172a", fontSize: "0.78rem", fontWeight: 700, overflowWrap: "anywhere" }}>{value}</div>
+    </div>
+  );
+}
+
+function HealthBadge({ value }: { value: string }) {
+  const colors = value === "RED"
+    ? { background: "#fee2e2", color: "#991b1b", border: "#fecaca" }
+    : value === "AMBER"
+      ? { background: "#fef3c7", color: "#92400e", border: "#fde68a" }
+      : { background: "#dcfce7", color: "#166534", border: "#bbf7d0" };
+  return <span style={{ ...colors, border: `1px solid ${colors.border}`, borderRadius: "8px", padding: "0.35rem 0.6rem", fontSize: "0.72rem", fontWeight: 800 }}>{value}</span>;
+}
+
+function BriefingMetricRow({ items }: { items: Array<[string, number]> }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.4rem" }}>
+      {items.map(([label, value]) => (
+        <div key={label} style={{ alignItems: "center", border: "1px solid #e2e8f0", borderRadius: "6px", display: "flex", justifyContent: "space-between", minHeight: "32px", padding: "0.35rem 0.45rem", background: "#f8fafc", gap: "0.35rem" }}>
+          <div style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: 700 }}>{label}</div>
+          <div style={{ color: "#0f172a", fontSize: "0.86rem", fontWeight: 800 }}>{value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PriorityItem({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div style={{ borderLeft: "4px solid #f97316", background: "#fff7ed", padding: "0.55rem 0.65rem" }}>
+      <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "#9a3412" }}>{title}</div>
+      <div style={{ fontSize: "0.72rem", color: "#475569", marginTop: "0.18rem" }}>{detail}</div>
+    </div>
+  );
+}
+
+function BriefingNarrativeSection({
+  title,
+  text,
+  checkpoints = false,
+}: {
+  title: string;
+  text?: string | null;
+  checkpoints?: boolean;
+}) {
+  if (!text) return null;
+  const items = getNarrativePresentationItems(
+    text,
+    checkpoints ? "CHECKPOINTS" : "BULLETS"
+  );
+
+  return (
+    <section style={{ paddingBottom: "0.2rem" }}>
+      {title && <div style={{ fontSize: "0.76rem", fontWeight: 800, color: "#334155", textTransform: "uppercase", marginBottom: "0.35rem" }}>{title}</div>}
+      <div style={{ display: "grid", gap: "0.28rem", fontSize: "0.78rem", lineHeight: 1.35 }}>
+        {items.map((item, index) => (
+          <div key={`${item.text}-${index}`}>
+            <div style={{ display: "grid", gridTemplateColumns: "1rem 1fr", gap: "0.3rem" }}>
+              <span style={{ color: checkpoints ? "#15803d" : "#475569", fontWeight: 800 }}>
+                {checkpoints ? "✓" : "•"}
+              </span>
+              <span>{item.text}</span>
+            </div>
+            {item.children.map((child, childIndex) => (
+              <div key={`${child}-${childIndex}`} style={{ display: "grid", gridTemplateColumns: "1rem 1fr", gap: "0.3rem", marginLeft: "1.3rem", marginTop: "0.18rem", color: "#334155" }}>
+                <span>◦</span>
+                <span>{child}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

@@ -13,6 +13,15 @@ export const executiveReportProjectInclude = {
     where: { isActive: true },
     orderBy: [{ version: "desc" }, { createdAt: "desc" }],
   },
+  managedNarratives: {
+    include: {
+      revisions: {
+        where: { status: { in: ["APPROVED", "PROPOSED"] } },
+        orderBy: [{ revisionNumber: "desc" }],
+      },
+    },
+    orderBy: [{ objectKey: "asc" }, { variant: "asc" }],
+  },
   projectDecisions: {
     where: {
       isActive: true,

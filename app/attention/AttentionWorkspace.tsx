@@ -55,6 +55,7 @@ const categoryLabelKeys: Record<AttentionCategory, TranslationKey> = {
   Decision: "attention.category.decision",
   Reporting: "attention.category.reporting",
   "Time Tracking": "attention.category.timeTracking",
+  "Agent Suggestion": "attention.category.agentSuggestion",
 };
 
 const actionLabelKeys: Partial<Record<string, TranslationKey>> = {
@@ -150,11 +151,18 @@ function translateDescription(description: string, t: Translator) {
       "attention.description.reportStale",
   };
 
+  if (description === "Risk requires attention for one or more reasons.") {
+    return t("attention.description.riskRequiresAttention");
+  }
+
   const descriptionKey = descriptionKeys[description];
   return descriptionKey ? t(descriptionKey) : description;
 }
 
-function translateReason(reason: string, t: Translator) {
+function translateReason(reason: string, t: Translator): string {
+  if (reason.includes(" | ")) {
+    return reason.split(" | ").map((item) => translateReason(item, t)).join("; ");
+  }
   const dayReasonPatterns: { pattern: RegExp; key: TranslationKey }[] = [
     {
       pattern: /^Planned start passed by (\d+) day\(s\)\.$/,
@@ -199,6 +207,7 @@ function translateReason(reason: string, t: Translator) {
     "No evidence recorded for mitigation actions.": "attention.reason.noMitigationEvidence",
     "Residual assessment pending.": "attention.reason.residualAssessmentPending",
     "Management review pending.": "attention.reason.managementReviewPending",
+    "Risk is escalated.": "attention.reason.riskEscalated",
     "Escalated decision.": "attention.reason.escalatedDecision",
     "No active report exists for the project.": "attention.reason.noActiveReport",
     "Reporting pack pending approval.": "attention.reason.reportingPackPendingApproval",

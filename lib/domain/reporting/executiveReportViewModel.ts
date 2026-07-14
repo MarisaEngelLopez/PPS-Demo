@@ -16,12 +16,17 @@ import {
   requiresExecutiveRiskAttention,
 } from "@/lib/domain/reporting/executiveReportRules";
 import { getExecutiveReportSections } from "@/lib/domain/reporting/executiveReportSections";
+import {
+  buildManagedNarrativeAssetsFromReportingPack,
+  buildManagedNarrativeAssetsFromRepository,
+} from "@/lib/domain/narrative/narrativeRepository";
 import { buildExecutiveRiskLifecycleRows } from "./executiveRiskLifecycle";
 import type {
   ExecutiveReportDecision,
   ExecutiveReportProject,
   ExecutiveReportReportingPack,
 } from "@/lib/domain/reporting/executiveReportTypes";
+import type { NarrativeLanguage } from "@/lib/domain/narrative/narrativeTypes";
 
 function getDecisionStatus(decision: ExecutiveReportDecision) {
   return (
@@ -52,11 +57,15 @@ export function buildExecutiveReportViewModel({
   reportingPack,
   pdfMode = false,
   today = new Date(),
+  narrativeLanguage,
+  includeDraftNarratives = false,
 }: {
   project: ExecutiveReportProject;
   reportingPack: ExecutiveReportReportingPack | null;
   pdfMode?: boolean;
   today?: Date;
+  narrativeLanguage?: NarrativeLanguage;
+  includeDraftNarratives?: boolean;
 }) {
   const reportDate = new Date(today);
   reportDate.setHours(0, 0, 0, 0);
@@ -109,6 +118,37 @@ export function buildExecutiveReportViewModel({
   const workstreamCockpitMetrics =
     buildWorkstreamCockpitMetrics(projectWorkstreams);
   const milestoneCockpitMetrics = buildMilestoneCockpitMetrics(projectEvents);
+  const selectedNarrativeLanguage =
+    narrativeLanguage ??
+    (project.reportLanguageMode === "ES" ? "ES" : project.defaultLanguage);
+  const repositoryNarrativeAssets = buildManagedNarrativeAssetsFromRepository({
+    narratives: project.managedNarratives ?? [],
+    sourceReportingPackId: reportingPack?.id,
+    language: selectedNarrativeLanguage,
+    includeDrafts: includeDraftNarratives,
+  });
+  const reportingPackLanguage: NarrativeLanguage =
+    project.reportLanguageMode === "ES"
+      ? "ES"
+      : project.reportLanguageMode === "EN"
+        ? "EN"
+        : project.defaultLanguage;
+  const reportingPackNarrativeAssets =
+    selectedNarrativeLanguage === reportingPackLanguage
+      ? buildManagedNarrativeAssetsFromReportingPack({
+          reportingPack,
+          language: reportingPackLanguage,
+        })
+      : [];
+  const repositoryKeys = new Set(
+    repositoryNarrativeAssets.map((asset) => `${asset.objectKey}:${asset.variant}`)
+  );
+  const narrativeAssets = [
+    ...repositoryNarrativeAssets,
+    ...reportingPackNarrativeAssets.filter(
+      (asset) => !repositoryKeys.has(`${asset.objectKey}:${asset.variant}`)
+    ),
+  ];
 
   const sections = getExecutiveReportSections({
     reportingPack,
@@ -141,6 +181,7 @@ export function buildExecutiveReportViewModel({
     riskCockpitMetrics,
     workstreamCockpitMetrics,
     milestoneCockpitMetrics,
+    narrativeAssets,
     sections,
   };
 }

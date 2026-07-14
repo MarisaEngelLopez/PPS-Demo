@@ -28,16 +28,19 @@ export function VoiceInputControl({
   enabled,
   onTranscript,
   onInstructionEnd,
+  onStart,
 }: {
   enabled: boolean;
   onTranscript: (transcript: string) => void;
   onInstructionEnd?: (transcript: string) => void;
+  onStart?: () => void;
 }) {
   const { t, locale } = useTranslation();
   const [voiceStatus, setVoiceStatus] = useState("");
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const finalTranscriptRef = useRef("");
+  const lastTranscriptRef = useRef("");
+  const committedTranscriptRef = useRef("");
 
   if (!enabled) return null;
 
@@ -49,10 +52,46 @@ export function VoiceInputControl({
   }
 
   function splitInstructionAtEnd(transcript: string) {
-    const match = transcript.match(/\b(end|over|fin)\b/i);
+    const match = transcript.match(/\b(over|fin)\b/i);
     if (!match || match.index === undefined) return null;
 
     return transcript.slice(0, match.index).trim();
+  }
+
+  function normalizeTranscript(transcript: string) {
+    return transcript.replace(/\s+/g, " ").trim();
+  }
+
+  function mergeTranscript(baseTranscript: string, nextTranscript: string) {
+    const base = normalizeTranscript(baseTranscript);
+    const next = normalizeTranscript(nextTranscript);
+
+    if (!base) return next;
+    if (!next) return base;
+
+    const baseLower = base.toLowerCase();
+    const nextLower = next.toLowerCase();
+
+    if (baseLower === nextLower) return base;
+    if (nextLower.startsWith(`${baseLower} `)) return next;
+    if (baseLower.endsWith(` ${nextLower}`)) return base;
+
+    const baseWords = base.split(" ");
+    const nextWords = next.split(" ");
+    const maxOverlap = Math.min(baseWords.length, nextWords.length);
+
+    for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+      const baseSuffix = baseWords.slice(-overlap).join(" ").toLowerCase();
+      const nextPrefix = nextWords.slice(0, overlap).join(" ").toLowerCase();
+
+      if (baseSuffix === nextPrefix) {
+        return normalizeTranscript(
+          `${baseWords.join(" ")} ${nextWords.slice(overlap).join(" ")}`
+        );
+      }
+    }
+
+    return normalizeTranscript(`${base} ${next}`);
   }
 
   function startVoiceCapture() {
@@ -78,28 +117,39 @@ export function VoiceInputControl({
     }
 
     const recognition = new Recognition();
-    finalTranscriptRef.current = "";
+    lastTranscriptRef.current = "";
+    committedTranscriptRef.current = "";
+    onStart?.();
     recognition.lang = locale === "es" ? "es-ES" : "en-US";
     recognition.interimResults = true;
     recognition.continuous = true;
     recognition.onresult = (event) => {
+      let committedTranscript = committedTranscriptRef.current;
       let interimTranscript = "";
       const startIndex = event.resultIndex ?? 0;
 
       for (let index = startIndex; index < event.results.length; index += 1) {
         const result = event.results[index];
-        const resultTranscript = result[0]?.transcript?.trim() ?? "";
+        const resultTranscript = normalizeTranscript(result[0]?.transcript ?? "");
         if (!resultTranscript) continue;
 
         if (result.isFinal) {
-          finalTranscriptRef.current = `${finalTranscriptRef.current} ${resultTranscript}`.trim();
+          committedTranscript = mergeTranscript(
+            committedTranscript,
+            resultTranscript
+          );
         } else {
-          interimTranscript = `${interimTranscript} ${resultTranscript}`.trim();
+          interimTranscript = mergeTranscript(interimTranscript, resultTranscript);
         }
       }
 
-      const transcript = `${finalTranscriptRef.current} ${interimTranscript}`.trim();
+      committedTranscriptRef.current = committedTranscript;
+      const transcript = mergeTranscript(committedTranscript, interimTranscript);
+
       if (transcript) {
+        if (transcript === lastTranscriptRef.current) return;
+        lastTranscriptRef.current = transcript;
+
         const finalInstruction = splitInstructionAtEnd(transcript);
 
         if (finalInstruction !== null) {

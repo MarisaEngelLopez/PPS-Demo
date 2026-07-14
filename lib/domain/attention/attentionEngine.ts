@@ -11,7 +11,8 @@ export type AttentionCategory =
   | "Risk Action"
   | "Decision"
   | "Reporting"
-  | "Time Tracking";
+  | "Time Tracking"
+  | "Agent Suggestion";
 
 export type AttentionSeverity = "Critical" | "High" | "Medium" | "Low";
 
@@ -34,7 +35,20 @@ export type AttentionItem = {
 const HIGH_RISK_EXPOSURE_THRESHOLD = 12;
 const STALE_REPORT_DAYS_THRESHOLD = 35;
 const RISK_LIFECYCLE_ATTENTION_LOOKAHEAD_DAYS = 7;
+const AGENT_SUGGESTION_OVERDUE_HOURS = 24;
 const REPORTING_REQUIRED_PROJECT_STATUS_CODES = new Set(["ACTIVE", "IN_PROGRESS"]);
+const SEVERITY_RANK: Record<AttentionSeverity, number> = {
+  Low: 0,
+  Medium: 1,
+  High: 2,
+  Critical: 3,
+};
+
+function highestSeverity(values: AttentionSeverity[]) {
+  return values.reduce((highest, value) =>
+    SEVERITY_RANK[value] > SEVERITY_RANK[highest] ? value : highest
+  );
+}
 
 function startOfLocalDay(now = new Date()) {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -48,6 +62,23 @@ function dateOnly(value: Date | string | null | undefined) {
 function daysBetween(from: Date, to: Date) {
   const oneDay = 24 * 60 * 60 * 1000;
   return Math.floor((startOfLocalDay(to).getTime() - startOfLocalDay(from).getTime()) / oneDay);
+}
+
+function addHours(value: Date, hours: number) {
+  return new Date(value.getTime() + hours * 60 * 60 * 1000);
+}
+
+function parseJsonObject(value: string | null | undefined) {
+  if (!value) return {};
+
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 function isWithinAttentionWindow(
@@ -87,11 +118,11 @@ function projectRequiresReporting(project: { governedStatus?: { code: string } |
 }
 
 function projectWorkstreamHref(projectId: string, workstreamId: string) {
-  return `/projects/${projectId}#project-workstream-${workstreamId}`;
+  return `/projects/${projectId}?view=management#project-workstream-${workstreamId}`;
 }
 
 function projectEventHref(projectId: string, eventId: string) {
-  return `/projects/${projectId}#project-event-${eventId}`;
+  return `/projects/${projectId}?view=management#project-event-${eventId}`;
 }
 
 function riskHref(riskId: string) {
@@ -107,11 +138,29 @@ function decisionHref(decisionId: string) {
 }
 
 function projectReportingWorkspaceHref(projectId: string) {
-  return `/projects/${projectId}#executive-reporting-workspace`;
+  return `/projects/${projectId}?view=narrative#executive-reporting-workspace`;
 }
 
 function timeTrackingAssistantHref() {
   return "/time-tracking/assistant";
+}
+
+function projectProgressAssistantHref() {
+  return "/projects/progress-assistant";
+}
+
+function agentSuggestionHref(agentKey: string) {
+  return agentKey === "PROJECT_PROGRESS"
+    ? projectProgressAssistantHref()
+    : timeTrackingAssistantHref();
+}
+
+function agentSuggestionAgentLabel(agentKey: string) {
+  return agentKey === "PROJECT_PROGRESS"
+    ? "Project Progress Assistant"
+    : agentKey === "TIME_TRACKING"
+      ? "Time Tracking Assistant"
+      : "Agent";
 }
 
 function statusIsClosed(status?: { code: string } | null) {
@@ -151,7 +200,19 @@ function itemSortValue(item: AttentionItem) {
 
 export async function getDailyAttentionItems(now = new Date()): Promise<AttentionItem[]> {
   const today = startOfLocalDay(now);
-  const [workstreams, events, risks, riskActions, decisions, projects, workSessions] =
+  const agentSuggestionCutoff = new Date(
+    now.getTime() - AGENT_SUGGESTION_OVERDUE_HOURS * 60 * 60 * 1000
+  );
+  const [
+    workstreams,
+    events,
+    risks,
+    riskActions,
+    decisions,
+    projects,
+    workSessions,
+    agentSuggestions,
+  ] =
     await Promise.all([
       prisma.projectWorkstream.findMany({
         where: { isActive: true },
@@ -224,10 +285,67 @@ export async function getDailyAttentionItems(now = new Date()): Promise<Attentio
         },
         orderBy: [{ startedAt: "asc" }],
       }),
+      prisma.agentSuggestion.findMany({
+        where: {
+          appliedAt: null,
+          createdAt: { lte: agentSuggestionCutoff },
+          status: { code: "OPEN" },
+        },
+        include: {
+          instruction: { include: { project: true } },
+        },
+        orderBy: [{ createdAt: "asc" }],
+      }),
     ]);
 
   const items: AttentionItem[] = [];
+  const projectById = new Map(projects.map((project) => [project.id, project]));
   const riskLifecycleConfig = riskLifecycleConfigFromRisks(risks);
+
+  for (const suggestion of agentSuggestions) {
+    const payload = parseJsonObject(suggestion.payloadJson);
+    const payloadProjectId =
+      typeof payload.projectId === "string" ? payload.projectId : null;
+    const project =
+      (payloadProjectId ? projectById.get(payloadProjectId) : null) ??
+      (suggestion.instruction.projectId
+        ? projectById.get(suggestion.instruction.projectId)
+        : null);
+
+    if (!project) continue;
+
+    const overdueAt = addHours(
+      suggestion.createdAt,
+      AGENT_SUGGESTION_OVERDUE_HOURS
+    );
+    const overdueHours = Math.max(
+      0,
+      Math.floor((now.getTime() - overdueAt.getTime()) / (60 * 60 * 1000))
+    );
+    const overdueDays = Math.floor(overdueHours / 24);
+    const agentLabel = agentSuggestionAgentLabel(suggestion.agentKey);
+
+    items.push({
+      id: `agent-suggestion-overdue-${suggestion.id}`,
+      category: "Agent Suggestion",
+      severity: overdueDays >= 2 ? "High" : "Medium",
+      projectId: project.id,
+      projectCode: project.projectCode,
+      projectName: project.name,
+      title: suggestion.title,
+      description:
+        suggestion.summary ||
+        "Agent suggestion is open and waiting for review or rejection.",
+      dueDate: dateOnly(overdueAt),
+      owner: agentLabel,
+      attentionReason:
+        overdueDays > 0
+          ? `Open suggestion is overdue by ${overdueDays} day(s).`
+          : `Open suggestion has been waiting more than ${AGENT_SUGGESTION_OVERDUE_HOURS} hours.`,
+      actionLabel: `Open ${agentLabel}`,
+      actionHref: agentSuggestionHref(suggestion.agentKey),
+    });
+  }
 
   for (const session of workSessions) {
     const isPaused = session.status.code === "ON_HOLD";
@@ -322,116 +440,64 @@ export async function getDailyAttentionItems(now = new Date()): Promise<Attentio
     const project = risk.project;
     const lifecycle = deriveRiskLifecycleSummary(risk, riskLifecycleConfig);
     const actionHref = riskHref(risk.id);
-
-    if (!lifecycle.isClosed && risk.exposure >= HIGH_RISK_EXPOSURE_THRESHOLD) {
-      items.push({
-        id: `risk-exposure-${risk.id}`,
-        category: "Risk",
-        severity: risk.exposure >= 16 ? "Critical" : "High",
-        projectId: project.id,
-        projectCode: project.projectCode,
-        projectName: project.name,
-        title: risk.title,
-        description: "Risk exposure is above the attention threshold.",
-        dueDate: dateOnly(risk.targetResolutionDate),
-        owner: risk.owner?.fullName ?? "-",
-        attentionReason: `Exposure ${risk.exposure}.`,
-        actionLabel: "Open Risk",
-        actionHref,
-      });
-    }
-
-    if (!lifecycle.isClosed && risk.riskActions.length === 0) {
-      items.push({
-        id: `risk-no-actions-${risk.id}`,
-        category: "Risk",
-        severity: "Medium",
-        projectId: project.id,
-        projectCode: project.projectCode,
-        projectName: project.name,
-        title: risk.title,
-        description: "Risk has no mitigation actions.",
-        dueDate: dateOnly(risk.targetResolutionDate),
-        owner: risk.owner?.fullName ?? "-",
-        attentionReason: "No mitigation actions recorded.",
-        actionLabel: "Open Risk",
-        actionHref,
-      });
-    }
-
-    if (
+    const isEligible =
       !lifecycle.isClosed &&
-      lifecycle.actionTotal > 0 &&
-      lifecycle.evidenceCount === 0
-    ) {
-      items.push({
-        id: `risk-no-evidence-${risk.id}`,
-        category: "Risk",
-        severity: "Medium",
-        projectId: project.id,
-        projectCode: project.projectCode,
-        projectName: project.name,
-        title: risk.title,
-        description: "Risk mitigation has actions but no structured evidence records.",
-        dueDate: dateOnly(risk.targetResolutionDate),
-        owner: risk.owner?.fullName ?? "-",
-        attentionReason: "No evidence recorded for mitigation actions.",
-        actionLabel: "Open Risk Evidence",
-        actionHref,
-      });
-    }
+      (risk.escalated ||
+        isWithinAttentionWindow(
+          risk.targetResolutionDate,
+          today,
+          RISK_LIFECYCLE_ATTENTION_LOOKAHEAD_DAYS
+        ));
+    if (!isEligible) continue;
 
-    if (
-      lifecycle.stageKey === "RESIDUAL_ASSESSMENT" &&
-      isWithinAttentionWindow(
-        risk.targetResolutionDate,
-        today,
-        RISK_LIFECYCLE_ATTENTION_LOOKAHEAD_DAYS
-      )
-    ) {
-      items.push({
-        id: `risk-residual-assessment-${risk.id}`,
-        category: "Risk",
-        severity: "Medium",
-        projectId: project.id,
-        projectCode: project.projectCode,
-        projectName: project.name,
-        title: risk.title,
-        description:
-          "All mitigation actions are closed. A residual risk assessment is required.",
-        dueDate: dateOnly(risk.targetResolutionDate),
-        owner: risk.owner?.fullName ?? "-",
-        attentionReason: "Residual assessment pending.",
-        actionLabel: "Open Risk Assessment",
-        actionHref,
-      });
-    }
+    const reasons: string[] = [];
+    const severities: AttentionSeverity[] = [];
+    let actionLabel = "Open Risk";
 
-    if (
-      lifecycle.needsManagementReview &&
-      isWithinAttentionWindow(
-        risk.targetResolutionDate,
-        today,
-        RISK_LIFECYCLE_ATTENTION_LOOKAHEAD_DAYS
-      )
-    ) {
-      items.push({
-        id: `risk-management-review-${risk.id}`,
-        category: "Risk",
-        severity: risk.exposure >= HIGH_RISK_EXPOSURE_THRESHOLD ? "High" : "Medium",
-        projectId: project.id,
-        projectCode: project.projectCode,
-        projectName: project.name,
-        title: risk.title,
-        description:
-          "Residual assessment is recorded and the risk is pending management review.",
-        dueDate: dateOnly(risk.targetResolutionDate),
-        owner: risk.owner?.fullName ?? "-",
-        attentionReason: "Management review pending.",
-        actionLabel: "Open Management Review",
-        actionHref,
-      });
+    if (risk.escalated) {
+      reasons.push("Risk is escalated.");
+      severities.push("High");
     }
+    if (risk.exposure >= HIGH_RISK_EXPOSURE_THRESHOLD) {
+      reasons.push(`Exposure ${risk.exposure}.`);
+      severities.push(risk.exposure >= 16 ? "Critical" : "High");
+    }
+    if (risk.riskActions.length === 0) {
+      reasons.push("No mitigation actions recorded.");
+      severities.push("Medium");
+    }
+    if (lifecycle.actionTotal > 0 && lifecycle.evidenceCount === 0) {
+      reasons.push("No evidence recorded for mitigation actions.");
+      severities.push("Medium");
+      actionLabel = "Open Risk Evidence";
+    }
+    if (lifecycle.stageKey === "RESIDUAL_ASSESSMENT") {
+      reasons.push("Residual assessment pending.");
+      severities.push("Medium");
+      actionLabel = "Open Risk Assessment";
+    }
+    if (lifecycle.needsManagementReview) {
+      reasons.push("Management review pending.");
+      severities.push(risk.exposure >= HIGH_RISK_EXPOSURE_THRESHOLD ? "High" : "Medium");
+      actionLabel = "Open Management Review";
+    }
+    if (reasons.length === 0) continue;
+
+    items.push({
+      id: `risk-${risk.id}`,
+      category: "Risk",
+      severity: highestSeverity(severities),
+      projectId: project.id,
+      projectCode: project.projectCode,
+      projectName: project.name,
+      title: risk.title,
+      description: "Risk requires attention for one or more reasons.",
+      dueDate: dateOnly(risk.targetResolutionDate),
+      owner: risk.owner?.fullName ?? "-",
+      attentionReason: reasons.join(" | "),
+      actionLabel,
+      actionHref,
+    });
   }
 
   for (const action of riskActions) {

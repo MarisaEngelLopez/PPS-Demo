@@ -17,6 +17,7 @@ import {
   formatReportMonthYear as formatMonthYear,
 } from "@/lib/domain/reporting/executiveReportRules";
 import { buildExecutiveReportViewModel } from "@/lib/domain/reporting/executiveReportViewModel";
+import { buildExecutiveBriefingModel } from "@/lib/domain/reporting/executiveBriefingModel";
 import {
   cockpitMetricToneColors,
   sortCockpitMetrics,
@@ -24,6 +25,11 @@ import {
   type CockpitMetricGroup,
 } from "@/lib/domain/reporting/cockpitMetrics";
 import { chunkNarrativeText } from "@/lib/domain/reporting/narrativePagination";
+import {
+  formatNarrativePresentationText,
+  getNarrativePresentationItems,
+  type NarrativePresentationMode,
+} from "@/lib/domain/reporting/narrativePresentation";
 import type {
   ExecutiveReportDecision,
   ExecutiveReportProject,
@@ -37,6 +43,8 @@ import { tableStyle, thStyle, tdStyle } from "@/components/ui/tableStyles";
 import { translate } from "@/lib/i18n/dictionaries";
 import type { AppLocale } from "@/lib/i18n/locales";
 import { getServerLocale } from "@/lib/i18n/server";
+import { findManagedNarrativeAsset } from "@/lib/domain/narrative/narrativeRepository";
+import { resolveNarrativePresentationMode } from "@/lib/domain/narrative/narrativeDocument";
 import {
   getExecutiveReportSectionTitle,
   translateCockpitMetrics,
@@ -49,6 +57,7 @@ type ExportPageProps = {
   searchParams?: Promise<{
     projectId?: string;
     reportingPackId?: string;
+    view?: string;
   }>;
 };
 
@@ -209,13 +218,48 @@ function PdfPage({
   );
 }
 
-function NarrativeBlock({ text }: { text?: string | null }) {
+function NarrativeBlock({
+  text,
+  mode,
+}: {
+  text?: string | null;
+  mode: NarrativePresentationMode;
+}) {
   if (!text) return null;
+  const items = getNarrativePresentationItems(text, mode);
 
   return (
-    <div className="pdf-narrative-wrap">
-      <div className="pdf-narrative">{text}</div>
+    <div className={`pdf-narrative-wrap pdf-narrative-${mode.toLowerCase()}`}>
+      <ul className="pdf-narrative">
+        {items.map((item, index) => (
+          <li className="pdf-narrative-item" key={`${item.text}-${index}`}>
+            <span>{mode === "CHECKPOINTS" ? "✓" : "•"}</span>
+            <div>
+              <div>{item.text}</div>
+              {item.children.length > 0 && (
+                <ul className="pdf-narrative-children">
+                  {item.children.map((child, childIndex) => (
+                    <li key={`${child}-${childIndex}`}>
+                      <span>◦</span>
+                      <div>{child}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
+  );
+}
+
+function BriefingCard({ title, children, wide = false }: { title: string; children: React.ReactNode; wide?: boolean }) {
+  return (
+    <section className={`pdf-briefing-card${wide ? " pdf-briefing-card-wide" : ""}`}>
+      <div className="pdf-briefing-card-title">{title}</div>
+      {children}
+    </section>
   );
 }
 
@@ -223,12 +267,15 @@ function NarrativePages({
   id,
   title,
   text,
+  mode = "BULLETS",
 }: {
   id: string;
   title: string;
   text?: string | null;
+  mode?: NarrativePresentationMode;
 }) {
-  const chunks = chunkNarrativeText(text, {
+  const presentationText = formatNarrativePresentationText(text, mode);
+  const chunks = chunkNarrativeText(presentationText, {
     maxVisualLines: PDF_NARRATIVE_MAX_VISUAL_LINES,
     approximateCharsPerLine: PDF_NARRATIVE_APPROX_CHARS_PER_LINE,
   });
@@ -241,7 +288,7 @@ function NarrativePages({
           key={`${id}-${index}`}
           title={title}
         >
-          <NarrativeBlock text={chunk} />
+          <NarrativeBlock text={chunk} mode={mode} />
         </PdfPage>
       ))}
     </>
@@ -480,7 +527,14 @@ export default async function ExecutiveReportExportPage({
     reportingPackId: params?.reportingPackId,
     selectedProjectId,
   });
+  const briefingOnly = params?.view === "briefing";
 
+  const reportViewModel = buildExecutiveReportViewModel({
+    project,
+    reportingPack,
+    pdfMode: true,
+    includeDraftNarratives: true,
+  });
   const {
     decisions,
     executiveDecisionAttention,
@@ -495,15 +549,50 @@ export default async function ExecutiveReportExportPage({
     workstreamCockpitMetrics,
     milestoneCockpitMetrics,
     sections: reportSections,
-  } = buildExecutiveReportViewModel({
-    project,
-    reportingPack,
-    pdfMode: true,
-  });
+    narrativeAssets,
+  } = reportViewModel;
   const riskLifecycleLabels = buildExecutiveRiskLifecycleLabels((key) =>
     translate(locale, key)
   );
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key);
+  const detailedNarrativeAsset = (objectKey: "executive-summary" | "accomplishments" | "issues-concerns" | "next-steps" | "management-ask" | "conclusion") =>
+    findManagedNarrativeAsset(narrativeAssets, { objectKey, variant: "DETAILED" });
+  const detailedNarrative = (objectKey: Parameters<typeof detailedNarrativeAsset>[0]) =>
+    detailedNarrativeAsset(objectKey)?.content ?? null;
+  const detailedNarrativeMode = (objectKey: Parameters<typeof detailedNarrativeAsset>[0]) =>
+    resolveNarrativePresentationMode({
+      preference: detailedNarrativeAsset(objectKey)?.presentationMode,
+      objectKey,
+    });
+  const briefing = buildExecutiveBriefingModel({
+    project,
+    reportingPack,
+    report: reportViewModel,
+    locale,
+  });
+  const briefingPage = (
+    <PdfPage className="pdf-briefing-page">
+      <div className="pdf-briefing-heading">
+        <div><div className="pdf-briefing-kicker">{t("report.executiveBriefing")}</div><div className="pdf-briefing-project">{project.name}</div></div>
+        <div className="pdf-briefing-meta">{project.projectManagerContact?.name ?? "-"} · {formatMonthYear(reportingPack?.reportingDate)}</div>
+      </div>
+      <div className="pdf-briefing-timeline">
+        <ExecutiveTimelineGantt projectWorkstreams={allProjectWorkstreams} projectEvents={briefing.timelineEvents} briefingMode />
+      </div>
+      <div className="pdf-briefing-grid">
+        <BriefingCard title={t("report.executiveSummary")}><NarrativeBlock text={briefing.narratives.executiveSummary} mode="CHECKPOINTS" /></BriefingCard>
+        <BriefingCard title={locale === "es" ? "Estado de entrega" : "Delivery Status"}><PdfCockpitMetricGrid metrics={[...workstreamCockpitMetrics, ...milestoneCockpitMetrics].slice(0, 4)} locale={locale} /></BriefingCard>
+        <BriefingCard title={locale === "es" ? "Pulso del proyecto" : "Project Pulse"}><div className="pdf-briefing-pulse">{briefing.pulse.map((item) => <div key={item.key}><span>{item.label}</span><strong>{item.value}</strong></div>)}</div></BriefingCard>
+        <BriefingCard title={t("report.progressSinceLastReport")}><NarrativeBlock text={briefing.narratives.progressSinceLastReport} mode="BULLETS" /></BriefingCard>
+        <BriefingCard title={locale === "es" ? "Riesgos" : "Risks"}><PdfCockpitMetricGrid metrics={riskCockpitMetrics} locale={locale} /></BriefingCard>
+        <BriefingCard title={locale === "es" ? "Decisiones" : "Decisions"}><PdfCockpitMetricGrid metrics={decisionCockpitMetrics} locale={locale} /></BriefingCard>
+        <BriefingCard title={t("report.issuesConcerns")}><NarrativeBlock text={briefing.narratives.issuesConcerns} mode="BULLETS" /></BriefingCard>
+        <BriefingCard title={t("report.nextSteps")}><NarrativeBlock text={briefing.narratives.nextSteps} mode="BULLETS" /></BriefingCard>
+        <BriefingCard title={t("report.managementAsk")} wide><NarrativeBlock text={briefing.narratives.managementAsk} mode="BULLETS" /></BriefingCard>
+        <BriefingCard title={t("report.conclusion")} wide><NarrativeBlock text={briefing.narratives.conclusion} mode="CHECKPOINTS" /></BriefingCard>
+      </div>
+    </PdfPage>
+  );
 
   return (
     <main className="executive-report-export">
@@ -709,8 +798,46 @@ export default async function ExecutiveReportExportPage({
           font-size: 0.86rem;
           line-height: 1.5;
           padding: 0.8rem;
-          white-space: pre-wrap;
           width: 100%;
+          list-style: none;
+          margin: 0;
+          display: grid;
+          gap: 0.55rem;
+        }
+
+        .pdf-narrative > .pdf-narrative-item,
+        .pdf-narrative-children li {
+          display: grid;
+          grid-template-columns: 1.25rem 1fr;
+          gap: 0.45rem;
+        }
+
+        .pdf-narrative li > span {
+          color: #475569;
+          font-weight: 800;
+        }
+
+        .pdf-narrative-children {
+          display: grid;
+          gap: 0.3rem;
+          list-style: none;
+          margin: 0.35rem 0 0;
+          padding: 0;
+          font-size: 0.92em;
+          font-weight: 400;
+        }
+
+        .pdf-narrative-checkpoints .pdf-narrative {
+          background: #ffffff;
+          border: 0;
+          font-size: 1.05rem;
+          font-weight: 600;
+          gap: 0.9rem;
+          max-width: 150mm;
+        }
+
+        .pdf-narrative-checkpoints .pdf-narrative li > span {
+          color: #15803d;
         }
 
         .pdf-cockpit-grid {
@@ -885,6 +1012,43 @@ export default async function ExecutiveReportExportPage({
           width: 100%;
         }
 
+        .pdf-briefing-page { padding: 7mm 9mm; overflow: hidden; }
+        .pdf-briefing-heading { display: flex; justify-content: space-between; align-items: end; border-bottom: 2px solid #2563eb; padding-bottom: 4px; }
+        .pdf-briefing-kicker { color: #2563eb; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+        .pdf-briefing-project { color: #0f172a; font-size: 18px; font-weight: 800; }
+        .pdf-briefing-meta { color: #475569; font-size: 9px; }
+        .pdf-briefing-timeline { height: 58mm; overflow: hidden; margin-top: 3px; position: relative; contain: layout paint; }
+        .pdf-briefing-timeline > * { zoom: .54; }
+        .pdf-briefing-timeline .section-panel { border: 0 !important; border-radius: 0 !important; padding: 0 !important; }
+        .pdf-briefing-timeline table { table-layout: fixed; }
+        .pdf-briefing-timeline th, .pdf-briefing-timeline td { font-size: 7px !important; padding: 4px 5px !important; }
+        .pdf-briefing-timeline th:nth-child(1), .pdf-briefing-timeline td:nth-child(1) { width: 22%; }
+        .pdf-briefing-timeline th:nth-child(2), .pdf-briefing-timeline td:nth-child(2) { width: 14%; }
+        .pdf-briefing-timeline th:nth-child(3), .pdf-briefing-timeline td:nth-child(3) { width: 9%; }
+        .pdf-briefing-timeline th:nth-child(4), .pdf-briefing-timeline td:nth-child(4) { width: 55%; }
+        .pdf-briefing-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: 27mm 27mm 24mm; gap: 3px; }
+        .pdf-briefing-card { border: 1px solid #cbd5e1; padding: 4px 5px; min-height: 0; overflow: hidden; }
+        .pdf-briefing-card-wide { grid-column: span 2; min-height: 0; }
+        .pdf-briefing-card-title { color: #0f172a; font-size: 9px; line-height: 1.1; font-weight: 800; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px; margin-bottom: 3px; }
+        .pdf-briefing-card .pdf-narrative-wrap { align-items: flex-start; margin: 0; min-height: 0; }
+        .pdf-briefing-card .pdf-narrative { gap: 2px; font-size: 7px; line-height: 1.15; }
+        .pdf-briefing-card .pdf-narrative-item { grid-template-columns: 9px 1fr; gap: 1px; }
+        .pdf-briefing-card .pdf-cockpit-grid { display: block; margin: 0; }
+        .pdf-briefing-card .pdf-metric-group-label { display: none; }
+        .pdf-briefing-card .pdf-metric-group + .pdf-metric-group { margin-top: 2px; }
+        .pdf-briefing-card .pdf-metric-grid { grid-template-columns: repeat(3, 1fr); gap: 2px; }
+        .pdf-briefing-card .pdf-metric-card { min-height: 4.2mm; padding: 1px 2px; }
+        .pdf-briefing-card .pdf-metric-label { font-size: 5.3px; line-height: 1; }
+        .pdf-briefing-card .pdf-metric-value { font-size: 6.4px; line-height: 1; }
+        .pdf-briefing-pulse { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; font-size: 7px; }
+        .pdf-briefing-pulse > div { display: flex; justify-content: space-between; gap: 3px; border-bottom: 1px solid #e2e8f0; padding: 2px; }
+        .pdf-briefing-priority { display: grid; gap: 3px; font-size: 7px; line-height: 1.2; }
+        .pdf-briefing-priority span { color: #475569; }
+        .pdf-combined-cockpit-section { border-top: 1px solid #cbd5e1; margin-top: 1.2rem; padding-top: .5rem; }
+        .pdf-distributed-page { display: flex; flex-direction: column; }
+        .pdf-distributed-sections { display: flex; flex: 1; flex-direction: column; justify-content: space-between; gap: 8mm; min-height: 0; }
+        .pdf-distributed-section { break-inside: avoid; page-break-inside: avoid; }
+
         @media print {
           body {
             background: #ffffff;
@@ -923,6 +1087,7 @@ export default async function ExecutiveReportExportPage({
         <PrintButton />
       </div>
 
+      {briefingOnly ? briefingPage : <>
       <section className="pdf-page cover-page">
         <div className="cover-top">
           <LogoBlock
@@ -965,6 +1130,8 @@ export default async function ExecutiveReportExportPage({
         </div>
       </section>
 
+      {briefingPage}
+
       <PdfPage title={translate(locale, "report.index")}>
         <ol className="index-list">
           {reportSections.map((section, index) => (
@@ -976,33 +1143,37 @@ export default async function ExecutiveReportExportPage({
         </ol>
       </PdfPage>
 
-      {reportingPack?.executiveSummary && (
+      {detailedNarrative("executive-summary") && (
         <NarrativePages
           id="executive-summary"
           title={translate(locale, "report.executiveSummary")}
-          text={reportingPack.executiveSummary}
+          text={detailedNarrative("executive-summary")}
+          mode={detailedNarrativeMode("executive-summary")}
         />
       )}
 
-      {reportingPack?.achievements && (
+      {detailedNarrative("accomplishments") && (
         <NarrativePages
           id="achievements"
           title={translate(locale, "report.achievements")}
-          text={reportingPack.achievements}
+          text={detailedNarrative("accomplishments")}
+          mode={detailedNarrativeMode("accomplishments")}
         />
       )}
 
-      {reportingPack?.issues && (
+      {detailedNarrative("issues-concerns") && (
         <NarrativePages
           id="issues"
           title={translate(locale, "report.issuesConcerns")}
-          text={reportingPack.issues}
+          text={detailedNarrative("issues-concerns")}
+          mode={detailedNarrativeMode("issues-concerns")}
         />
       )}
 
       {decisions.length > 0 && (
         <PdfPage
           id="decision-cockpit"
+          className="pdf-distributed-page"
           title={getExecutiveReportSectionTitle(
             reportSections.find((section) => section.id === "decision-cockpit") ?? {
               id: "decision-cockpit",
@@ -1011,26 +1182,23 @@ export default async function ExecutiveReportExportPage({
             t
           )}
         >
-          <PdfCockpitMetricGrid metrics={decisionCockpitMetrics} locale={locale} />
-          <div className="pdf-attention-title">
-            {translate(locale, "report.executiveDecisionAttention")}
+          <div className="pdf-distributed-sections">
+            <div className="pdf-distributed-section"><PdfCockpitMetricGrid metrics={decisionCockpitMetrics} locale={locale} /></div>
+            <div className="pdf-distributed-section">
+              <div className="pdf-attention-title">{translate(locale, "report.executiveDecisionAttention")}</div>
+              <DecisionAttentionTable decisions={executiveDecisionAttention} locale={locale} />
+            </div>
+            <div className="pdf-distributed-section">
+              <div className="pdf-attention-title">{translate(locale, "report.recentDecisionOutcomes")}</div>
+              <RecentDecisionOutcomes decisions={recentDecisionOutcomes} locale={locale} />
+            </div>
           </div>
-          <DecisionAttentionTable
-            decisions={executiveDecisionAttention}
-            locale={locale}
-          />
-          <div className="pdf-attention-title">
-            {translate(locale, "report.recentDecisionOutcomes")}
-          </div>
-          <RecentDecisionOutcomes
-            decisions={recentDecisionOutcomes}
-            locale={locale}
-          />
         </PdfPage>
       )}
 
       <PdfPage
         id="risk-cockpit"
+        className="pdf-distributed-page"
         title={getExecutiveReportSectionTitle(
           reportSections.find((section) => section.id === "risk-cockpit") ?? {
             id: "risk-cockpit",
@@ -1039,14 +1207,16 @@ export default async function ExecutiveReportExportPage({
           t
         )}
       >
-        <div className="pdf-section-description">
-          {translate(locale, "report.riskSectionDescription")}
+        <div className="pdf-distributed-sections">
+          <div className="pdf-distributed-section">
+            <div className="pdf-section-description">{translate(locale, "report.riskSectionDescription")}</div>
+            <PdfCockpitMetricGrid metrics={riskCockpitMetrics} locale={locale} />
+          </div>
+          <div className="pdf-distributed-section">
+            <div className="pdf-attention-title">{translate(locale, "report.riskAttention")}</div>
+            <RiskAttentionTable risks={attentionRisks} locale={locale} />
+          </div>
         </div>
-        <PdfCockpitMetricGrid metrics={riskCockpitMetrics} locale={locale} />
-        <div className="pdf-attention-title">
-          {translate(locale, "report.riskAttention")}
-        </div>
-        <RiskAttentionTable risks={attentionRisks} locale={locale} />
       </PdfPage>
 
       {riskLifecycleRows.length > 0 && (
@@ -1090,7 +1260,7 @@ export default async function ExecutiveReportExportPage({
         </PdfPage>
       ))}
 
-      {allProjectWorkstreams.length > 0 && (
+      {(allProjectWorkstreams.length > 0 || allProjectEvents.length > 0) && (
         <PdfPage
           id="workstreams"
           title={getExecutiveReportSectionTitle(
@@ -1102,23 +1272,23 @@ export default async function ExecutiveReportExportPage({
           )}
           className="project-timeline-page"
         >
-          <PdfCockpitMetricGrid metrics={workstreamCockpitMetrics} locale={locale} />
-        </PdfPage>
-      )}
-
-      {allProjectEvents.length > 0 && (
-        <PdfPage
-          id="milestones"
-          title={getExecutiveReportSectionTitle(
-            reportSections.find((section) => section.id === "milestones") ?? {
-              id: "milestones",
-              title: "",
-            },
-            t
+          {allProjectWorkstreams.length > 0 && (
+            <PdfCockpitMetricGrid metrics={workstreamCockpitMetrics} locale={locale} />
           )}
-          className="project-timeline-page"
-        >
-          <PdfCockpitMetricGrid metrics={milestoneCockpitMetrics} locale={locale} />
+          {allProjectEvents.length > 0 && (
+            <div className="pdf-combined-cockpit-section" id="milestones">
+              <div className="pdf-attention-title">
+                {getExecutiveReportSectionTitle(
+                  reportSections.find((section) => section.id === "milestones") ?? {
+                    id: "milestones",
+                    title: "",
+                  },
+                  t
+                )}
+              </div>
+              <PdfCockpitMetricGrid metrics={milestoneCockpitMetrics} locale={locale} />
+            </div>
+          )}
         </PdfPage>
       )}
 
@@ -1141,29 +1311,33 @@ export default async function ExecutiveReportExportPage({
         </PdfPage>
       )}
 
-      {reportingPack?.nextSteps && (
+      {detailedNarrative("next-steps") && (
         <NarrativePages
           id="next-steps"
           title={translate(locale, "report.nextSteps")}
-          text={reportingPack.nextSteps}
+          text={detailedNarrative("next-steps")}
+          mode={detailedNarrativeMode("next-steps")}
         />
       )}
 
-      {reportingPack?.managementAsk && (
+      {detailedNarrative("management-ask") && (
         <NarrativePages
           id="management-ask"
           title={translate(locale, "report.managementAsk")}
-          text={reportingPack.managementAsk}
+          text={detailedNarrative("management-ask")}
+          mode={detailedNarrativeMode("management-ask")}
         />
       )}
 
-      {reportingPack?.conclusion && (
+      {detailedNarrative("conclusion") && (
         <NarrativePages
           id="conclusion"
           title={translate(locale, "report.conclusion")}
-          text={reportingPack.conclusion}
+          text={detailedNarrative("conclusion")}
+          mode={detailedNarrativeMode("conclusion")}
         />
       )}
+      </>}
     </main>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { TranslatedButtonLabel } from "@/components/ui/TranslatedControls";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "@/components/i18n/TranslationProvider";
 import { useActionToast } from "@/components/ui/useActionToast";
 import {
@@ -15,10 +16,15 @@ import {
   isReportingPackLocked,
 } from "@/lib/domain/reporting/reportingPackRules";
 import { NarrativeField } from "@/components/reporting-packs/NarrativeField";
+import { NarrativeLifecyclePanel } from "@/components/reporting-packs/NarrativeLifecyclePanel";
 import type {
   ReportingPackAction,
+  ReportingPackNarrativeCopyAction,
   ReportingPackSummary,
   ReportingWorkspaceProject,
+  ManagedNarrativeSummary,
+  NarrativeLifecycleAction,
+  ReportingPackNarrativeGenerationAction,
 } from "@/components/reporting-packs/types";
 import { toDateInputValue } from "@/components/reporting-packs/types";
 
@@ -26,14 +32,29 @@ type ReportingPackEditorProps = {
   project: ReportingWorkspaceProject;
   pack: ReportingPackSummary;
   updateReportingPack: ReportingPackAction;
+  copyPreviousReportingPackNarrative: ReportingPackNarrativeCopyAction;
+  managedNarratives: ManagedNarrativeSummary[];
+  submitReportingPackNarrativeForReview: NarrativeLifecycleAction;
+  reviewNarrativeProposal: NarrativeLifecycleAction;
+  updateNarrativeProposal: NarrativeLifecycleAction;
+  generateReportingPackNarrativeProposals: ReportingPackNarrativeGenerationAction;
 };
 
 export function ReportingPackEditor({
   project,
   pack,
   updateReportingPack,
+  copyPreviousReportingPackNarrative,
+  managedNarratives,
+  submitReportingPackNarrativeForReview,
+  reviewNarrativeProposal,
+  updateNarrativeProposal,
+  generateReportingPackNarrativeProposals,
 }: ReportingPackEditorProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
+  const [narrativeLanguage, setNarrativeLanguage] = useState<"EN" | "ES">(
+    locale === "es" ? "ES" : "EN"
+  );
   const isReadOnly = isReportingPackLocked(pack.status ?? "");
   const [title, setTitle] = useState(pack.title ?? "");
   const [reportingDate, setReportingDate] = useState(
@@ -53,6 +74,26 @@ export function ReportingPackEditor({
   const [managementAsk, setManagementAsk] = useState(pack.managementAsk ?? "");
   const [conclusion, setConclusion] = useState(pack.conclusion ?? "");
   const { handleAction } = useActionToast();
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  const presentationModeFor = (objectKey: string) => {
+    const narrative = managedNarratives.find(
+      (item) => item.objectKey === objectKey && item.variant === "DETAILED"
+    );
+    const revision =
+      narrative?.revisions.find(
+        (item) =>
+          item.sourceReportingPackId === pack.id && item.status === "PROPOSED"
+      ) ??
+      narrative?.revisions.find(
+        (item) =>
+          item.sourceReportingPackId === pack.id && item.status === "APPROVED"
+      );
+    return revision?.presentationMode === "BULLETS" ||
+      revision?.presentationMode === "CHECKPOINTS"
+      ? revision.presentationMode
+      : "AUTO";
+  };
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,8 +102,51 @@ export function ReportingPackEditor({
     await handleAction(updateReportingPack, formData);
   }
 
+  async function handleCopyPreviousNarrative() {
+    const formData = new FormData();
+    formData.set("id", pack.id);
+    formData.set("projectId", project.id);
+
+    await handleAction(copyPreviousReportingPackNarrative, formData, (res) => {
+      if (!res.narrative) return;
+
+      setExecutiveSummary(res.narrative.executiveSummary ?? "");
+      setAchievements(res.narrative.achievements ?? "");
+      setIssues(res.narrative.issues ?? "");
+      setNextSteps(res.narrative.nextSteps ?? "");
+      setManagementAsk(res.narrative.managementAsk ?? "");
+      setConclusion(res.narrative.conclusion ?? "");
+    });
+  }
+
+  async function handleSubmitForReview() {
+    if (!formRef.current) return;
+    const saveData = new FormData(formRef.current);
+    await handleAction(updateReportingPack, saveData, async () => {
+      const reviewData = new FormData(formRef.current!);
+      await handleAction(submitReportingPackNarrativeForReview, reviewData, () => router.refresh());
+    });
+  }
+
+  async function handleGenerateNarrative() {
+    if (!formRef.current) return;
+    const formData = new FormData(formRef.current);
+    formData.set("narrativeLanguage", narrativeLanguage);
+    await handleAction(generateReportingPackNarrativeProposals, formData, (res) => {
+      if (!res.narrative) return;
+      setExecutiveSummary(res.narrative.executiveSummary ?? "");
+      setAchievements(res.narrative.achievements ?? "");
+      setIssues(res.narrative.issues ?? "");
+      setNextSteps(res.narrative.nextSteps ?? "");
+      setManagementAsk(res.narrative.managementAsk ?? "");
+      setConclusion(res.narrative.conclusion ?? "");
+      router.refresh();
+    });
+  }
+
   return (
     <form
+      ref={formRef}
       onSubmit={handleSubmit}
       style={{
         marginTop: "1rem",
@@ -163,6 +247,8 @@ export function ReportingPackEditor({
         onChange={setExecutiveSummary}
         disabled={isReadOnly}
         placeholder={"Overall status narrative.\nKey message for executive audience."}
+        objectKey="executive-summary"
+        initialPresentationMode={presentationModeFor("executive-summary")}
       />
 
       <NarrativeField
@@ -174,6 +260,8 @@ export function ReportingPackEditor({
         placeholder={
           "- Completed phase 1 deployment\n- Stabilized reporting cadence\n- Confirmed client governance model"
         }
+        objectKey="accomplishments"
+        initialPresentationMode={presentationModeFor("accomplishments")}
       />
 
       <NarrativeField
@@ -185,6 +273,8 @@ export function ReportingPackEditor({
         placeholder={
           "- Resource bottleneck in testing\n- Pending client decision on scope\n- Dependency on infrastructure readiness"
         }
+        objectKey="issues-concerns"
+        initialPresentationMode={presentationModeFor("issues-concerns")}
       />
 
       <NarrativeField
@@ -196,6 +286,8 @@ export function ReportingPackEditor({
         placeholder={
           "- Complete UAT preparation\n- Finalize milestone baseline\n- Confirm steering committee inputs"
         }
+        objectKey="next-steps"
+        initialPresentationMode={presentationModeFor("next-steps")}
       />
 
       <NarrativeField
@@ -207,6 +299,8 @@ export function ReportingPackEditor({
         placeholder={
           "- Decision required on budget extension\n- Escalation support with client sponsor\n- Approval for additional resources"
         }
+        objectKey="management-ask"
+        initialPresentationMode={presentationModeFor("management-ask")}
       />
 
       <NarrativeField
@@ -216,10 +310,58 @@ export function ReportingPackEditor({
         onChange={setConclusion}
         disabled={isReadOnly}
         placeholder={"Final executive takeaway, delivery outlook, or confidence statement."}
+        objectKey="conclusion"
+        initialPresentationMode={presentationModeFor("conclusion")}
+      />
+
+      <NarrativeLifecyclePanel
+        projectId={project.id}
+        reportingPackId={pack.id}
+        narratives={managedNarratives}
+        language={narrativeLanguage}
+        onLanguageChange={setNarrativeLanguage}
+        reviewNarrativeProposal={reviewNarrativeProposal}
+        updateNarrativeProposal={updateNarrativeProposal}
       />
 
       {!isReadOnly && (
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: "0.5rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleGenerateNarrative}
+            style={{ ...buttonStyle, background: "#1d4ed8" }}
+          >
+            {t("actions.generateNarrative")}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSubmitForReview}
+            style={{ ...buttonStyle, background: "#0f766e" }}
+          >
+            Save &amp; Submit for Review
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCopyPreviousNarrative}
+            style={{
+              ...buttonStyle,
+              background: "#ffffff",
+              color: "#334155",
+              border: "1px solid #cbd5e1",
+            }}
+          >
+            {t("actions.copyPreviousNarrative")}
+          </button>
+
           <button type="submit" style={buttonStyle}>
             <TranslatedButtonLabel labelKey="actions.saveReportingPack" />
           </button>

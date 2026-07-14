@@ -30,9 +30,12 @@ import {
 import { parseAgentJson } from "@/lib/domain/agents/agentRules";
 import {
   buildStartWorkSessionUnderstanding,
+  extractExplicitNotes,
   extractPhaseReference,
+  getPositionReferencedCandidate,
   getCandidateConfidence,
   parseTimeTrackingNaturalLanguage,
+  projectReferenceAliases,
   rankNaturalLanguageCandidates,
   type TimeTrackingInterpretation,
 } from "@/lib/domain/agents/naturalLanguageInterpreter";
@@ -112,6 +115,14 @@ function isTimeTrackingEligibleWorkstream(projectWorkstream: {
 function phaseNameMatchesReference(phaseName: string | null | undefined, phaseReference: string) {
   const phaseNumber = phaseName?.match(/\b([0-9]+)\b/)?.[1];
   return phaseNumber === phaseReference;
+}
+
+function workSessionActionLabel(intent: TimeTrackingInterpretation["intent"]) {
+  if (intent === "PAUSE_WORK_SESSION") return "pause";
+  if (intent === "RESUME_WORK_SESSION") return "resume";
+  if (intent === "FINISH_WORK_SESSION") return "finish";
+  if (intent === "UPDATE_WORK_SESSION_NOTES") return "update notes for";
+  return "apply";
 }
 
 function parseClientTimestamp(value: FormDataEntryValue | null) {
@@ -236,6 +247,7 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
   interpretation?: TimeTrackingInterpretation;
 }> {
   const rawInstruction = asString(formData.get("rawInstruction"));
+  const selectedProjectId = asString(formData.get("projectId"));
   if (!rawInstruction) {
     return agentError("Write an instruction first.");
   }
@@ -246,7 +258,8 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
     if (
       intent === "PAUSE_WORK_SESSION" ||
       intent === "RESUME_WORK_SESSION" ||
-      intent === "FINISH_WORK_SESSION"
+      intent === "FINISH_WORK_SESSION" ||
+      intent === "UPDATE_WORK_SESSION_NOTES"
     ) {
       const config = await getTimeTrackingAgentConfig();
       const enabledError = assertAgentEnabled(config);
@@ -257,20 +270,42 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
       const user = await getOneUserAgentUser();
       if (!user) return agentError("No user exists for the Time Tracking Assistant.");
 
+      const openStatusIds = await getOpenWorkSessionStatusIds();
       const statusCode =
-        intent === "RESUME_WORK_SESSION" ? "ON_HOLD" : "IN_PROGRESS";
-      const status = await getAgentStatusByCodeForScope(
-        prisma,
-        "WORK_SESSION",
-        statusCode
-      );
-      if (!status) return agentError(`Missing work session status: ${statusCode}.`);
+        intent === "RESUME_WORK_SESSION"
+          ? "ON_HOLD"
+          : intent === "PAUSE_WORK_SESSION"
+            ? "IN_PROGRESS"
+            : null;
+      const status = statusCode
+        ? await getAgentStatusByCodeForScope(prisma, "WORK_SESSION", statusCode)
+        : null;
+      if (statusCode && !status) return agentError(`Missing work session status: ${statusCode}.`);
+      if (!statusCode && openStatusIds.length === 0) {
+        return agentError("Missing open work session status setup.");
+      }
+
+      const notes = extractExplicitNotes(rawInstruction);
+      if (intent === "UPDATE_WORK_SESSION_NOTES" && !notes) {
+        return {
+          ok: false,
+          message: "I found a notes instruction, but no note text.",
+          interpretation: {
+            intent,
+            confidence: "LOW",
+            rawInstruction,
+            understoodText: "",
+            clarification: "Try: update note testing voice response.",
+          },
+        };
+      }
 
       const sessions = await prisma.workSession.findMany({
         where: {
           userId: user.id,
-          statusId: status.id,
+          statusId: statusCode ? status!.id : { in: openStatusIds },
           convertedTimeEntryId: null,
+          ...(selectedProjectId ? { projectId: selectedProjectId } : {}),
         },
         include: {
           project: true,
@@ -287,7 +322,9 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
       if (sessions.length === 0) {
         return {
           ok: false,
-          message: `No ${status.name.toLowerCase()} work session was found.`,
+          message: status
+            ? `No ${status.name.toLowerCase()} work session was found.`
+            : "No active or paused work session was found.",
           interpretation: {
             intent,
             confidence: "LOW",
@@ -296,7 +333,11 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
             clarification:
               intent === "RESUME_WORK_SESSION"
                 ? "There is no paused session to resume."
-                : "There is no active session to pause or finish.",
+                : intent === "PAUSE_WORK_SESSION"
+                  ? "There is no active session to pause."
+                  : intent === "FINISH_WORK_SESSION"
+                    ? "There is no active or paused session to finish."
+                    : "There is no active or paused session to update.",
           },
         };
       }
@@ -320,12 +361,7 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
       const projectWorkstreamLabel = formatProjectWorkstreamLabel(
         session.projectWorkstream
       );
-      const actionLabel =
-        intent === "PAUSE_WORK_SESSION"
-          ? "pause"
-          : intent === "RESUME_WORK_SESSION"
-            ? "resume"
-            : "finish";
+      const actionLabel = workSessionActionLabel(intent);
 
       return {
         ok: true,
@@ -334,7 +370,10 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
           intent,
           confidence: "HIGH",
           rawInstruction,
-          understoodText: `Understood: ${actionLabel} the current work session for ${projectLabel} / ${projectWorkstreamLabel}. Apply now?`,
+          understoodText:
+            intent === "UPDATE_WORK_SESSION_NOTES"
+              ? `Understood: update notes for the current work session to "${notes}". Apply now?`
+              : `Understood: ${actionLabel} the current work session. Apply now?`,
           projectId: session.projectId,
           projectLabel,
           projectWorkstreamId: session.projectWorkstreamId,
@@ -345,7 +384,7 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
           projectTaskLabel: session.projectTask?.name ?? undefined,
           workSessionId: session.id,
           actionLabel,
-          notes: rawInstruction,
+          notes,
         },
       };
     }
@@ -405,14 +444,18 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
     projects.map((project) => ({
       id: project.id,
       label: `${project.projectCode} - ${project.name}`,
-      aliases: [project.projectCode, project.name],
+      aliases: projectReferenceAliases(project),
     }))
   );
-  const selectedProjectId = projectCandidates[0]?.id ?? null;
+  const spokenProjectId = projectCandidates[0]?.score >= 4 ? projectCandidates[0].id : null;
+  const defaultProjectId = projects.some((project) => project.id === selectedProjectId)
+    ? selectedProjectId
+    : null;
+  const effectiveSelectedProjectId = spokenProjectId ?? defaultProjectId;
 
   const phaseReference = extractPhaseReference(rawInstruction);
-  const projectWorkstreamPool = selectedProjectId
-    ? projectWorkstreams.filter((workstream) => workstream.projectId === selectedProjectId)
+  const projectWorkstreamPool = effectiveSelectedProjectId
+    ? projectWorkstreams.filter((workstream) => workstream.projectId === effectiveSelectedProjectId)
     : projectWorkstreams;
   const phaseFilteredWorkstreamPool = phaseReference
     ? projectWorkstreamPool.filter((workstream) =>
@@ -455,6 +498,13 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
       aliases: getWorkstreamAliases(projectWorkstream),
     }))
   );
+  const positionReferencedWorkstream = getPositionReferencedCandidate(
+    rawInstruction,
+    workstreamPool.map((projectWorkstream) => ({
+      id: projectWorkstream.id,
+      label: formatProjectWorkstreamLabel(projectWorkstream),
+    }))
+  );
   const effectiveWorkstreamCandidates =
     uniquePhaseWorkstream && workstreamCandidates.length === 0
       ? [
@@ -464,6 +514,8 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
             score: 10,
           },
         ]
+      : workstreamCandidates.length === 0 && positionReferencedWorkstream
+        ? [positionReferencedWorkstream]
       : workstreamCandidates;
   const selectedProjectWorkstreamId =
     uniquePhaseWorkstream?.id ?? effectiveWorkstreamCandidates[0]?.id ?? workstreamPool[0]?.id;
@@ -471,7 +523,7 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
     (item) => item.id === selectedProjectWorkstreamId
   );
   const project = projects.find(
-    (item) => item.id === (selectedProjectId ?? projectWorkstream?.projectId)
+    (item) => item.id === (effectiveSelectedProjectId ?? projectWorkstream?.projectId)
   );
 
   const taskPool = selectedProjectWorkstreamId
@@ -535,6 +587,7 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
   const projectWorkstreamLabel = formatProjectWorkstreamLabel(projectWorkstream);
   const taskFamilyLabel = taskFamily.name;
   const projectTaskLabel = projectTask ? formatProjectTaskLabel(projectTask) : null;
+  const explicitNotes = extractExplicitNotes(rawInstruction);
 
   return {
     ok: confidence !== "LOW",
@@ -561,7 +614,7 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
       taskFamilyLabel,
       projectTaskId: projectTask?.id ?? null,
       projectTaskLabel,
-      notes: rawInstruction,
+      notes: explicitNotes,
       clarification:
         confidence === "MEDIUM"
           ? "Please review the match before confirming."

@@ -52,18 +52,18 @@ model User {
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
-  ownedRisks        ProjectRisk[]
-  ownedRiskActions  ProjectRiskAction[]
-  riskAssessments   RiskAssessment[]
-  riskReviews       RiskReview[]
-  agentInstructions AgentInstruction[]            @relation("AgentInstructionUser")
-  agentApprovals    AgentApproval[]               @relation("AgentApprovalUser")
-  agentActionLogs   AgentActionLog[]              @relation("AgentActionLogUser")
-  agentConfigLogs   AgentConfigurationChangeLog[] @relation("AgentConfigurationChangeLogUser")
-  workSessions      WorkSession[]
-  ownedCustomerDna  CustomerDna[]                 @relation("CustomerDnaOwner")
-  createdCustomerDna CustomerDna[]                @relation("CustomerDnaCreatedBy")
-  createdExecutiveIntelligence ExecutiveIntelligence[] @relation("ExecutiveIntelligenceCreatedBy")
+  ownedRisks                   ProjectRisk[]
+  ownedRiskActions             ProjectRiskAction[]
+  riskAssessments              RiskAssessment[]
+  riskReviews                  RiskReview[]
+  agentInstructions            AgentInstruction[]            @relation("AgentInstructionUser")
+  agentApprovals               AgentApproval[]               @relation("AgentApprovalUser")
+  agentActionLogs              AgentActionLog[]              @relation("AgentActionLogUser")
+  agentConfigLogs              AgentConfigurationChangeLog[] @relation("AgentConfigurationChangeLogUser")
+  workSessions                 WorkSession[]
+  ownedCustomerDna             CustomerDna[]                 @relation("CustomerDnaOwner")
+  createdCustomerDna           CustomerDna[]                 @relation("CustomerDnaCreatedBy")
+  createdExecutiveIntelligence ExecutiveIntelligence[]       @relation("ExecutiveIntelligenceCreatedBy")
 }
 
 model Status {
@@ -186,8 +186,9 @@ model Project {
 
   sponsorContact OrganizationContact? @relation("ProjectSponsorContact", fields: [sponsorContactId], references: [id], onDelete: SetNull)
 
-  reportingPacks   ProjectReportingPack[]
-  projectDecisions ProjectDecision[]
+  reportingPacks    ProjectReportingPack[]
+  managedNarratives ManagedNarrative[]
+  projectDecisions  ProjectDecision[]
 }
 
 model TaskFamily {
@@ -918,11 +919,11 @@ model RiskReview {
   reviewDate DateTime
   comments   String?
 
-  risk               ProjectRisk        @relation(fields: [riskId], references: [id], onDelete: Cascade)
-  residualAssessment RiskAssessment?    @relation(fields: [residualAssessmentId], references: [id], onDelete: SetNull)
-  reviewType         RiskReviewType     @relation(fields: [reviewTypeId], references: [id])
-  reviewOutcome      RiskReviewOutcome  @relation(fields: [reviewOutcomeId], references: [id])
-  reviewedByUser     User?              @relation(fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  risk               ProjectRisk              @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  residualAssessment RiskAssessment?          @relation(fields: [residualAssessmentId], references: [id], onDelete: SetNull)
+  reviewType         RiskReviewType           @relation(fields: [reviewTypeId], references: [id])
+  reviewOutcome      RiskReviewOutcome        @relation(fields: [reviewOutcomeId], references: [id])
+  reviewedByUser     User?                    @relation(fields: [reviewedByUserId], references: [id], onDelete: SetNull)
   decisionLinks      RiskReviewDecisionLink[]
 
   createdAt DateTime @default(now())
@@ -947,10 +948,10 @@ model RiskAssessment {
   comments    String?
 
   assessedByUserId String?
-  assessedByUser   User?   @relation(fields: [assessedByUserId], references: [id], onDelete: SetNull)
+  assessedByUser   User?    @relation(fields: [assessedByUserId], references: [id], onDelete: SetNull)
   assessmentDate   DateTime
 
-  risk ProjectRisk @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  risk        ProjectRisk  @relation(fields: [riskId], references: [id], onDelete: Cascade)
   riskReviews RiskReview[]
 
   createdAt DateTime @default(now())
@@ -1002,7 +1003,7 @@ model RiskActionEvidence {
   uploadedBy        String?
 
   riskAction   ProjectRiskAction @relation(fields: [riskActionId], references: [id], onDelete: Cascade)
-  evidenceType EvidenceType       @relation(fields: [evidenceTypeId], references: [id])
+  evidenceType EvidenceType      @relation(fields: [evidenceTypeId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1028,9 +1029,9 @@ model Organization {
 
   contacts OrganizationContact[]
 
-  issuerProjects   Project[] @relation("ProjectIssuerOrganization")
-  clientProjects   Project[] @relation("ProjectClientOrganization")
-  deliveryProjects Project[] @relation("ProjectDeliveryOrganization")
+  issuerProjects             Project[]               @relation("ProjectIssuerOrganization")
+  clientProjects             Project[]               @relation("ProjectClientOrganization")
+  deliveryProjects           Project[]               @relation("ProjectDeliveryOrganization")
   executiveIntelligenceItems ExecutiveIntelligence[]
 
   createdAt DateTime @default(now())
@@ -1055,8 +1056,8 @@ model OrganizationContact {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  managedProjects   Project[] @relation("ProjectManagerContact")
-  sponsoredProjects Project[] @relation("ProjectSponsorContact")
+  managedProjects            Project[]               @relation("ProjectManagerContact")
+  sponsoredProjects          Project[]               @relation("ProjectSponsorContact")
   executiveIntelligenceItems ExecutiveIntelligence[]
 
   createdAt DateTime @default(now())
@@ -1140,7 +1141,8 @@ model ProjectReportingPack {
   conclusion       String?
   isActive         Boolean @default(true)
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project            Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  narrativeRevisions ManagedNarrativeRevision[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1148,6 +1150,49 @@ model ProjectReportingPack {
   @@index([projectId])
   @@index([reportingDate])
   @@index([status])
+}
+
+model ManagedNarrative {
+  id        String       @id @default(cuid())
+  projectId String
+  objectKey String
+  variant   String
+  language  LanguageCode @default(EN)
+
+  project   Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  revisions ManagedNarrativeRevision[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, objectKey, variant, language])
+  @@index([projectId])
+}
+
+model ManagedNarrativeRevision {
+  id                    String    @id @default(cuid())
+  narrativeId           String
+  sourceReportingPackId String?
+  revisionNumber        Int
+  status                String    @default("PROPOSED") // PROPOSED | APPROVED | SUPERSEDED | REJECTED
+  content               String
+  documentJson          String?
+  evidenceJson          String?
+  presentationMode      String    @default("AUTO") // AUTO | CHECKPOINTS | BULLETS | PARAGRAPH
+  sourceType            String    @default("MANUAL") // MANUAL | GENERATED | COPIED
+  reviewNotes           String?
+  approvedAt            DateTime?
+  publishedAt           DateTime?
+
+  narrative           ManagedNarrative      @relation(fields: [narrativeId], references: [id], onDelete: Cascade)
+  sourceReportingPack ProjectReportingPack? @relation(fields: [sourceReportingPackId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([narrativeId, revisionNumber])
+  @@index([narrativeId, status])
+  @@index([sourceReportingPackId])
 }
 
 model ProjectDecision {
@@ -1177,8 +1222,8 @@ model ProjectDecision {
   notes      String?
   isActive   Boolean @default(true)
 
-  project           Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectWorkstream ProjectWorkstream? @relation(fields: [projectWorkstreamId], references: [id], onDelete: SetNull)
+  project           Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectWorkstream ProjectWorkstream?       @relation(fields: [projectWorkstreamId], references: [id], onDelete: SetNull)
   riskReviewLinks   RiskReviewDecisionLink[]
 
   createdAt DateTime @default(now())

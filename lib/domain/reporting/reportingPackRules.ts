@@ -79,3 +79,16 @@ export function getReportingPackCopyData(source: ReportingPackCopySource) {
     conclusion: source.conclusion ?? null,
   };
 }
+
+export function getNextDraftShellData(source: ReportingPackCopySource) {
+  return {
+    reportingPeriod: source.reportingPeriod ?? null,
+    reportIndex: source.reportIndex ?? null,
+    executiveSummary: null,
+    achievements: null,
+    issues: null,
+    nextSteps: null,
+    managementAsk: null,
+    conclusion: null,
+  };
+}

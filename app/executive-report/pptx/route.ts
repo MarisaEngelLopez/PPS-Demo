@@ -42,6 +42,7 @@ export async function GET(request: Request) {
     reportingPackId: searchParams.get("reportingPackId") ?? undefined,
     selectedProjectId,
   });
+  const briefingOnly = searchParams.get("view") === "briefing";
 
   const pptx = await createExecutiveReportPptx({
     project,
@@ -50,10 +51,11 @@ export async function GET(request: Request) {
     riskReviewTypeHints: (await getExecutiveRiskReviewTypeOptions()).map(
       (reviewType) => reviewType.name
     ),
+    briefingOnly,
   });
 
   const version = reportingPack ? `v${reportingPack.version}` : "latest";
-  const filename = `${filenamePart(project.projectCode)}-executive-report-${version}.pptx`;
+  const filename = `${filenamePart(project.projectCode)}-${briefingOnly ? "executive-briefing" : "executive-report"}-${version}.pptx`;
 
   return new Response(pptx, {
     headers: {

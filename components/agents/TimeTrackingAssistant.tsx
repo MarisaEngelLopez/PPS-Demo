@@ -6,6 +6,7 @@ import { useTranslation } from "@/components/i18n/TranslationProvider";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { OperationalActionCard } from "@/components/agents/OperationalActionCard";
 import { VoiceInputControl } from "@/components/agents/VoiceInputControl";
+import { detectVoiceCommandIntent } from "@/components/agents/voiceCommandIntents";
 import {
   speakVoiceConfirmation,
   speakVoiceConfirmationSegments,
@@ -268,12 +269,17 @@ function timeTrackingVoiceConfirmationSegments(
           ? "finalizar"
           : "aplicar";
 
+  if (interpretation.intent === "UPDATE_WORK_SESSION_NOTES") {
+    return [
+      {
+        text: `Entendido. Actualizar los comentarios de la sesión actual a: ${interpretation.notes ?? ""}. ¿Confirmas la acción?`,
+        locale: "es",
+      },
+    ];
+  }
+
   return [
-    { text: `Entendido. ${action} la sesión actual para `, locale: "es" },
-    { text: interpretation.projectLabel ?? "", locale: "en" },
-    { text: ". Actividad ", locale: "es" },
-    { text: interpretation.projectWorkstreamLabel ?? "", locale: "en" },
-    { text: ". ¿Confirmas la acción?", locale: "es" },
+    { text: `Entendido. ${action} la sesión actual. ¿Confirmas la acción?`, locale: "es" },
   ];
 }
 
@@ -320,6 +326,20 @@ const tableNoteInputStyle = {
   minHeight: "20px",
   lineHeight: 1,
   padding: "0.1rem 0.25rem",
+};
+
+const pendingActionButtonStyle = {
+  ...tableButtonStyle,
+  minHeight: "44px",
+  padding: "0.7rem 1rem",
+  fontSize: "0.95rem",
+};
+
+const pendingSecondaryButtonStyle = {
+  ...pendingActionButtonStyle,
+  background: "#ffffff",
+  color: "#334155",
+  border: "1px solid #cbd5e1",
 };
 
 export function TimeTrackingAssistant({
@@ -448,17 +468,195 @@ export function TimeTrackingAssistant({
     setConfirmedProjectWorkstreamId("");
   }
 
+  async function applyPendingInterpretation(pending = interpretation) {
+    if (!pending) return false;
+
+    if (
+      pending.intent === "START_WORK_SESSION" &&
+      pending.projectId &&
+      confirmedProjectWorkstreamId &&
+      pending.taskFamilyId
+    ) {
+      const formData = new FormData();
+      formData.set("projectId", pending.projectId);
+      formData.set("projectWorkstreamId", confirmedProjectWorkstreamId);
+      formData.set("taskFamilyId", pending.taskFamilyId);
+      formData.set("projectTaskId", pending.projectTaskId ?? "");
+      formData.set("instruction", pending.rawInstruction);
+      formData.set(
+        "interpretationCorrection",
+        confirmedProjectWorkstreamId !== pending.projectWorkstreamId
+          ? `Workstream corrected from ${pending.projectWorkstreamLabel} to ${findWorkstreamLabel(projectWorkstreams, confirmedProjectWorkstreamId, locale, t)}`
+          : ""
+      );
+      formData.set("sourceType", naturalInstructionSource);
+      formData.set("notes", pending.notes ?? "");
+      formData.set("clientTimestamp", getClientTimestamp());
+      await handleAction(startWorkSession, formData);
+      clearNaturalLanguageState();
+      return true;
+    }
+
+    if (
+      pending.workSessionId &&
+      [
+        "PAUSE_WORK_SESSION",
+        "RESUME_WORK_SESSION",
+        "FINISH_WORK_SESSION",
+        "UPDATE_WORK_SESSION_NOTES",
+      ].includes(
+        pending.intent
+      )
+    ) {
+      const action =
+        pending.intent === "PAUSE_WORK_SESSION"
+          ? pauseWorkSession
+          : pending.intent === "RESUME_WORK_SESSION"
+            ? resumeWorkSession
+            : pending.intent === "FINISH_WORK_SESSION"
+              ? finishWorkSession
+              : updateWorkSessionNotes;
+      const formData = new FormData();
+      formData.set("id", pending.workSessionId);
+      formData.set("clientTimestamp", getClientTimestamp());
+      if (pending.intent === "UPDATE_WORK_SESSION_NOTES") {
+        formData.set("notes", pending.notes ?? "");
+      }
+      await handleAction(action, formData);
+      clearNaturalLanguageState();
+      return true;
+    }
+
+    return false;
+  }
+
+  function repeatPendingConfirmation() {
+    if (!interpretation) return;
+
+    const segments =
+      interpretation.intent === "UNKNOWN"
+        ? timeTrackingVoiceFallbackSegments(interpretation, locale)
+        : timeTrackingVoiceConfirmationSegments(interpretation, locale);
+    speakVoiceConfirmationSegments(segments, locale);
+  }
+
+  async function handlePendingVoiceConfirmation(transcript: string) {
+    const commandIntent = detectVoiceCommandIntent(transcript);
+    if (commandIntent === "APPLY") {
+      const applied = await applyPendingInterpretation();
+      speakVoiceConfirmation(
+        applied
+          ? locale === "es"
+            ? "Aplicado."
+            : "Applied."
+          : locale === "es"
+            ? "No hay una acción pendiente para aplicar."
+            : "There is no pending action to apply.",
+        locale
+      );
+      return;
+    }
+
+    if (commandIntent === "CANCEL") {
+      clearNaturalLanguageState();
+      speakVoiceConfirmation(locale === "es" ? "Cancelado." : "Cancelled.", locale);
+      return;
+    }
+
+    speakVoiceConfirmation(
+      locale === "es"
+        ? "No he entendido la confirmación."
+        : "I did not understand the confirmation.",
+      locale
+    );
+  }
+
+  function renderPendingVoiceControls() {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={repeatPendingConfirmation}
+          style={pendingSecondaryButtonStyle}
+        >
+          {locale === "es" ? "Repetir confirmación" : "Repeat confirmation"}
+        </button>
+        <VoiceInputControl
+          enabled={voiceInputEnabled}
+          onStart={() => {
+            setNaturalInstruction("");
+            setNaturalInstructionSource("VOICE");
+          }}
+          onTranscript={(transcript) => {
+            setNaturalInstruction(transcript);
+            setNaturalInstructionSource("VOICE");
+          }}
+          onInstructionEnd={(transcript) => {
+            setNaturalInstruction(transcript);
+            setNaturalInstructionSource("VOICE");
+            void handlePendingVoiceConfirmation(transcript);
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => {
+            clearNaturalLanguageState();
+            speakVoiceConfirmation(locale === "es" ? "Cancelado." : "Cancelled.", locale);
+          }}
+          style={pendingSecondaryButtonStyle}
+        >
+          {t("actions.cancel")}
+        </button>
+      </>
+    );
+  }
+
   async function interpretNaturalInstruction(
     rawInstruction = naturalInstruction,
     sourceType: "TEXT" | "VOICE" = naturalInstructionSource
   ) {
+    if (sourceType === "VOICE") {
+      const commandIntent = detectVoiceCommandIntent(rawInstruction);
+      if (commandIntent === "APPLY") {
+        const applied = await applyPendingInterpretation();
+        speakVoiceConfirmation(
+          applied
+            ? locale === "es"
+              ? "Aplicado."
+              : "Applied."
+            : locale === "es"
+              ? "No hay una acción pendiente para aplicar."
+              : "There is no pending action to apply.",
+          locale
+        );
+        return;
+      }
+      if (commandIntent === "CANCEL") {
+        clearNaturalLanguageState();
+        speakVoiceConfirmation(locale === "es" ? "Cancelado." : "Cancelled.", locale);
+        return;
+      }
+    }
+
     const formData = new FormData();
     formData.set("rawInstruction", rawInstruction);
     formData.set("sourceType", sourceType);
+    formData.set("projectId", selectedProject);
 
     const result = await interpretTimeTrackingInstruction(formData);
     setInterpretationMessage(result?.message ?? "");
     setInterpretation(result?.interpretation ?? null);
+    if (result?.interpretation?.projectId) {
+      setSelectedProject(result.interpretation.projectId);
+      setSelectedProjectWorkstream(
+        result.interpretation.projectWorkstreamId ??
+          projectWorkstreams.find(
+            (projectWorkstream) =>
+              projectWorkstream.projectId === result.interpretation?.projectId
+          )?.id ??
+          ""
+      );
+    }
     setConfirmedProjectWorkstreamId(
       result?.interpretation?.projectWorkstreamId ?? ""
     );
@@ -507,6 +705,10 @@ export function TimeTrackingAssistant({
           <div style={tableActionGroupStyle}>
             <VoiceInputControl
               enabled={voiceInputEnabled}
+              onStart={() => {
+                clearNaturalLanguageState();
+                setNaturalInstructionSource("VOICE");
+              }}
               onTranscript={(transcript) => {
                 setNaturalInstruction(transcript);
                 setNaturalInstructionSource("VOICE");
@@ -634,20 +836,28 @@ export function TimeTrackingAssistant({
                   />
                   <input type="hidden" name="sourceType" value={naturalInstructionSource} />
                   <input type="hidden" name="notes" value={interpretation.notes ?? ""} />
-                  <button
-                    type="submit"
-                    disabled={!confirmedProjectWorkstreamId}
-                    style={{
-                      ...tableButtonStyle,
-                      opacity: !confirmedProjectWorkstreamId ? 0.55 : 1,
-                    }}
-                  >
-                    {t("actions.confirmStart")}
-                  </button>
+                  <div style={{ ...tableActionGroupStyle, marginTop: "0.65rem" }}>
+                    <button
+                      type="submit"
+                      disabled={!confirmedProjectWorkstreamId}
+                      style={{
+                        ...pendingActionButtonStyle,
+                        opacity: !confirmedProjectWorkstreamId ? 0.55 : 1,
+                      }}
+                    >
+                      {t("actions.confirmStart")}
+                    </button>
+                    {renderPendingVoiceControls()}
+                  </div>
                 </form>
               )}
             {interpretation.workSessionId &&
-              ["PAUSE_WORK_SESSION", "RESUME_WORK_SESSION", "FINISH_WORK_SESSION"].includes(
+              [
+                "PAUSE_WORK_SESSION",
+                "RESUME_WORK_SESSION",
+                "FINISH_WORK_SESSION",
+                "UPDATE_WORK_SESSION_NOTES",
+              ].includes(
                 interpretation.intent
               ) && (
                 <form
@@ -658,15 +868,23 @@ export function TimeTrackingAssistant({
                         ? pauseWorkSession
                         : interpretation.intent === "RESUME_WORK_SESSION"
                           ? resumeWorkSession
-                          : finishWorkSession;
+                          : interpretation.intent === "FINISH_WORK_SESSION"
+                            ? finishWorkSession
+                            : updateWorkSessionNotes;
                     await handleAction(action, formData);
                     clearNaturalLanguageState();
                   }}
                 >
                   <input type="hidden" name="id" value={interpretation.workSessionId} />
-                  <button type="submit" style={tableButtonStyle}>
-                    {t("actions.confirmAction")}
-                  </button>
+                  {interpretation.intent === "UPDATE_WORK_SESSION_NOTES" && (
+                    <input type="hidden" name="notes" value={interpretation.notes ?? ""} />
+                  )}
+                  <div style={{ ...tableActionGroupStyle, marginTop: "0.65rem" }}>
+                    <button type="submit" style={pendingActionButtonStyle}>
+                      {t("actions.confirmAction")}
+                    </button>
+                    {renderPendingVoiceControls()}
+                  </div>
                 </form>
               )}
           </div>
@@ -807,41 +1025,57 @@ export function TimeTrackingAssistant({
                 />
                 <input type="hidden" name="sourceType" value={naturalInstructionSource} />
                 <input type="hidden" name="notes" value={interpretation.notes ?? ""} />
-                <button
-                  type="submit"
-                  disabled={!confirmedProjectWorkstreamId}
-                  style={{
-                    ...tableButtonStyle,
-                    opacity: !confirmedProjectWorkstreamId ? 0.55 : 1,
-                  }}
-                >
-                  {t("actions.confirmStart")}
-                </button>
+                <div style={{ ...tableActionGroupStyle, marginTop: "0.65rem" }}>
+                  <button
+                    type="submit"
+                    disabled={!confirmedProjectWorkstreamId}
+                    style={{
+                      ...pendingActionButtonStyle,
+                      opacity: !confirmedProjectWorkstreamId ? 0.55 : 1,
+                    }}
+                  >
+                    {t("actions.confirmStart")}
+                  </button>
+                  {renderPendingVoiceControls()}
+                </div>
               </form>
             )}
           {interpretation.workSessionId &&
-            ["PAUSE_WORK_SESSION", "RESUME_WORK_SESSION", "FINISH_WORK_SESSION"].includes(
+            [
+              "PAUSE_WORK_SESSION",
+              "RESUME_WORK_SESSION",
+              "FINISH_WORK_SESSION",
+              "UPDATE_WORK_SESSION_NOTES",
+            ].includes(
               interpretation.intent
             ) && (
-              <form
+            <form
                 action={async (formData) => {
                   formData.set("clientTimestamp", getClientTimestamp());
                   const action =
-                    interpretation.intent === "PAUSE_WORK_SESSION"
-                      ? pauseWorkSession
-                      : interpretation.intent === "RESUME_WORK_SESSION"
-                        ? resumeWorkSession
-                        : finishWorkSession;
-                  await handleAction(action, formData);
-                  clearNaturalLanguageState();
-                }}
-              >
-                <input type="hidden" name="id" value={interpretation.workSessionId} />
-                <button type="submit" style={tableButtonStyle}>
+                  interpretation.intent === "PAUSE_WORK_SESSION"
+                    ? pauseWorkSession
+                    : interpretation.intent === "RESUME_WORK_SESSION"
+                      ? resumeWorkSession
+                      : interpretation.intent === "FINISH_WORK_SESSION"
+                        ? finishWorkSession
+                        : updateWorkSessionNotes;
+                await handleAction(action, formData);
+                clearNaturalLanguageState();
+              }}
+            >
+              <input type="hidden" name="id" value={interpretation.workSessionId} />
+              {interpretation.intent === "UPDATE_WORK_SESSION_NOTES" && (
+                <input type="hidden" name="notes" value={interpretation.notes ?? ""} />
+              )}
+              <div style={{ ...tableActionGroupStyle, marginTop: "0.65rem" }}>
+                <button type="submit" style={pendingActionButtonStyle}>
                   {t("actions.confirmAction")}
                 </button>
-              </form>
-            )}
+                {renderPendingVoiceControls()}
+              </div>
+            </form>
+          )}
         </div>
       )}
 

@@ -40,6 +40,7 @@ export async function GET(request: Request) {
     reportingPackId: searchParams.get("reportingPackId") ?? undefined,
     selectedProjectId,
   });
+  const briefingOnly = searchParams.get("view") === "briefing";
 
   const exportUrl = new URL("/executive-report/export", origin);
   exportUrl.searchParams.set("projectId", selectedProjectId);
@@ -47,6 +48,7 @@ export async function GET(request: Request) {
   if (reportingPack?.id) {
     exportUrl.searchParams.set("reportingPackId", reportingPack.id);
   }
+  if (briefingOnly) exportUrl.searchParams.set("view", "briefing");
 
   const browser = await chromium.launch({ headless: true });
   const cookieHeader = request.headers.get("cookie") ?? "";
@@ -71,7 +73,7 @@ export async function GET(request: Request) {
     });
 
     const version = reportingPack ? `v${reportingPack.version}` : "latest";
-    const filename = `${filenamePart(project.projectCode)}-executive-report-${version}.pdf`;
+    const filename = `${filenamePart(project.projectCode)}-${briefingOnly ? "executive-briefing" : "executive-report"}-${version}.pdf`;
 
     const pdfBody = new Blob([new Uint8Array(pdf)], {
       type: "application/pdf",

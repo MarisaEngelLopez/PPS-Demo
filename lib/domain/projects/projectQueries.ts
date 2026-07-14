@@ -85,6 +85,15 @@ export async function getProjectDetailPageData(projectId: string) {
         reportingPacks: {
           orderBy: [{ version: "desc" }, { createdAt: "desc" }],
         },
+        managedNarratives: {
+          include: {
+            revisions: {
+              where: { status: { in: ["PROPOSED", "APPROVED"] } },
+              orderBy: { revisionNumber: "desc" },
+            },
+          },
+          orderBy: [{ objectKey: "asc" }, { variant: "asc" }],
+        },
       },
     }),
     prisma.projectWorkstream.findMany({

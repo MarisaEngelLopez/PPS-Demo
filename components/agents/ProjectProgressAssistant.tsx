@@ -5,6 +5,7 @@ import { useTranslation } from "@/components/i18n/TranslationProvider";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { OperationalActionCard } from "@/components/agents/OperationalActionCard";
 import { VoiceInputControl } from "@/components/agents/VoiceInputControl";
+import { detectVoiceCommandIntent } from "@/components/agents/voiceCommandIntents";
 import {
   speakVoiceConfirmation,
   speakVoiceConfirmationSegments,
@@ -197,6 +198,20 @@ function projectProgressVoiceConfirmationSegments(
   ];
 }
 
+const pendingActionButtonStyle = {
+  ...tableButtonStyle,
+  minHeight: "44px",
+  padding: "0.7rem 1rem",
+  fontSize: "0.95rem",
+};
+
+const pendingSecondaryButtonStyle = {
+  ...pendingActionButtonStyle,
+  background: "#ffffff",
+  color: "#334155",
+  border: "1px solid #cbd5e1",
+};
+
 export function ProjectProgressAssistant({
   projects,
   projectWorkstreams,
@@ -267,10 +282,148 @@ export function ProjectProgressAssistant({
     setConfirmedTargetId("");
   }
 
+  async function applyPendingInterpretation(pending = interpretation) {
+    if (!pending?.projectId || !confirmedTargetId) return false;
+
+    const formData = new FormData();
+    formData.set("projectId", pending.projectId);
+    formData.set("command", pending.command);
+    formData.set("date", pending.date ?? "");
+    formData.set("visibility", pending.visibility ?? "DETAILED");
+    formData.set("rawInstruction", pending.rawInstruction);
+    formData.set("sourceType", naturalInstructionSource);
+    formData.set("clientTimestamp", getClientTimestamp());
+    formData.set(
+      "interpretationCorrection",
+      confirmedTargetId !== pending.targetId
+        ? `Target corrected from ${pending.targetLabel} to ${selectedTargetLabel()}`
+        : ""
+    );
+
+    if (pending.targetType === "WORKSTREAM") {
+      formData.set("projectWorkstreamId", confirmedTargetId);
+      await handleAction(createWorkstreamCommandSuggestion, formData);
+      clearNaturalLanguageState();
+      return true;
+    }
+
+    if (pending.targetType === "EVENT") {
+      formData.set("eventId", confirmedTargetId);
+      await handleAction(createEventCommandSuggestion, formData);
+      clearNaturalLanguageState();
+      return true;
+    }
+
+    return false;
+  }
+
+  function repeatPendingConfirmation() {
+    if (!interpretation) return;
+
+    speakVoiceConfirmationSegments(
+      projectProgressVoiceConfirmationSegments(interpretation, locale),
+      locale
+    );
+  }
+
+  async function handlePendingVoiceConfirmation(transcript: string) {
+    const commandIntent = detectVoiceCommandIntent(transcript);
+    if (commandIntent === "APPLY") {
+      const applied = await applyPendingInterpretation();
+      speakVoiceConfirmation(
+        applied
+          ? locale === "es"
+            ? "Sugerencia creada."
+            : "Suggestion created."
+          : locale === "es"
+            ? "No hay una sugerencia pendiente para crear."
+            : "There is no pending suggestion to create.",
+        locale
+      );
+      return;
+    }
+
+    if (commandIntent === "CANCEL") {
+      clearNaturalLanguageState();
+      speakVoiceConfirmation(locale === "es" ? "Cancelado." : "Cancelled.", locale);
+      return;
+    }
+
+    speakVoiceConfirmation(
+      locale === "es"
+        ? "No he entendido la confirmación."
+        : "I did not understand the confirmation.",
+      locale
+    );
+  }
+
+  function renderPendingVoiceControls() {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={repeatPendingConfirmation}
+          style={pendingSecondaryButtonStyle}
+        >
+          {locale === "es" ? "Repetir confirmación" : "Repeat confirmation"}
+        </button>
+        <VoiceInputControl
+          enabled={voiceInputEnabled}
+          onStart={() => {
+            setNaturalInstruction("");
+            setNaturalInstructionSource("VOICE");
+          }}
+          onTranscript={(transcript) => {
+            setNaturalInstruction(transcript);
+            setNaturalInstructionSource("VOICE");
+          }}
+          onInstructionEnd={(transcript) => {
+            setNaturalInstruction(transcript);
+            setNaturalInstructionSource("VOICE");
+            void handlePendingVoiceConfirmation(transcript);
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => {
+            clearNaturalLanguageState();
+            speakVoiceConfirmation(locale === "es" ? "Cancelado." : "Cancelled.", locale);
+          }}
+          style={pendingSecondaryButtonStyle}
+        >
+          {t("actions.cancel")}
+        </button>
+      </>
+    );
+  }
+
   async function interpretNaturalInstruction(
     rawInstruction = naturalInstruction,
     sourceType: "TEXT" | "VOICE" = naturalInstructionSource
   ) {
+    if (sourceType === "VOICE") {
+      const commandIntent = detectVoiceCommandIntent(rawInstruction);
+      if (commandIntent === "APPLY") {
+        const applied = await applyPendingInterpretation();
+        speakVoiceConfirmation(
+          applied
+            ? locale === "es"
+              ? "Sugerencia creada."
+              : "Suggestion created."
+            : locale === "es"
+              ? "No hay una sugerencia pendiente para crear."
+              : "There is no pending suggestion to create.",
+          locale
+        );
+        return;
+      }
+      if (commandIntent === "CANCEL") {
+        clearNaturalLanguageState();
+        speakVoiceConfirmation(locale === "es" ? "Cancelado." : "Cancelled.", locale);
+        return;
+      }
+    }
+
     const formData = new FormData();
     formData.set("rawInstruction", rawInstruction);
     formData.set("projectId", projectId);
@@ -281,6 +434,9 @@ export function ProjectProgressAssistant({
     const result = await interpretProjectProgressInstruction(formData);
     setInterpretationMessage(result?.message ?? "");
     setInterpretation(result?.interpretation ?? null);
+    if (result?.interpretation?.projectId) {
+      setProjectId(result.interpretation.projectId);
+    }
     setConfirmedTargetId(result?.interpretation?.targetId ?? "");
     if (sourceType === "VOICE" && result?.interpretation) {
       speakVoiceConfirmationSegments(
@@ -369,6 +525,10 @@ export function ProjectProgressAssistant({
         <div style={tableActionGroupStyle}>
           <VoiceInputControl
             enabled={voiceInputEnabled}
+            onStart={() => {
+              clearNaturalLanguageState();
+              setNaturalInstructionSource("VOICE");
+            }}
             onTranscript={(transcript) => {
               setNaturalInstruction(transcript);
               setNaturalInstructionSource("VOICE");
@@ -488,13 +648,16 @@ export function ProjectProgressAssistant({
                       : ""
                   }
                 />
-                <button
-                  type="submit"
-                  disabled={!confirmedTargetId}
-                  style={{ ...tableButtonStyle, opacity: !confirmedTargetId ? 0.55 : 1 }}
-                >
-                  {t("actions.createSuggestion")}
-                </button>
+                <div style={{ ...tableActionGroupStyle, marginTop: "0.65rem" }}>
+                  <button
+                    type="submit"
+                    disabled={!confirmedTargetId}
+                    style={{ ...pendingActionButtonStyle, opacity: !confirmedTargetId ? 0.55 : 1 }}
+                  >
+                    {t("actions.createSuggestion")}
+                  </button>
+                  {renderPendingVoiceControls()}
+                </div>
               </form>
             )}
           {interpretation.targetType === "EVENT" &&
@@ -531,13 +694,16 @@ export function ProjectProgressAssistant({
                       : ""
                   }
                 />
-                <button
-                  type="submit"
-                  disabled={!confirmedTargetId}
-                  style={{ ...tableButtonStyle, opacity: !confirmedTargetId ? 0.55 : 1 }}
-                >
-                  {t("actions.createSuggestion")}
-                </button>
+                <div style={{ ...tableActionGroupStyle, marginTop: "0.65rem" }}>
+                  <button
+                    type="submit"
+                    disabled={!confirmedTargetId}
+                    style={{ ...pendingActionButtonStyle, opacity: !confirmedTargetId ? 0.55 : 1 }}
+                  >
+                    {t("actions.createSuggestion")}
+                  </button>
+                  {renderPendingVoiceControls()}
+                </div>
               </form>
             )}
         </div>

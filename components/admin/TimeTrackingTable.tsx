@@ -5,8 +5,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/components/i18n/TranslationProvider";
 import { AddActionButton } from "@/components/ui/AddActionButton";
-import { SectionHeader } from "@/components/ui/SectionHeader";
-import { inputStyle, tableButtonStyle } from "@/components/ui/layoutStyles";
+import { SectionHeader, SectionHeaderActions } from "@/components/ui/SectionHeader";
+import { addActionButtonStyle, inputStyle, tableButtonStyle } from "@/components/ui/layoutStyles";
 import { tableStyle, thStyle, tdStyle } from "@/components/ui/tableStyles";
 import { useActionToast } from "@/components/ui/useActionToast";
 import { translateConfiguredOption } from "@/lib/i18n/displayTranslations";
@@ -206,17 +206,25 @@ export function TimeTrackingTable({
       <SectionHeader
         title={t("timeTracking.timeEntries")}
         action={
-          <AddActionButton
-            onClick={() => {
-              const fastProjectId = getFastEntryProjectId();
-              const fastWorkstreamId = getFastEntryWorkstreamId(fastProjectId);
-              setSelectedProject(fastProjectId);
-              setSelectedProjectWorkstream(fastWorkstreamId);
-              setIsCreating(true);
-            }}
-          >
-            {t("timeTracking.newTimeEntry")}
-          </AddActionButton>
+          <SectionHeaderActions>
+            <a
+              href="/time-tracking/export"
+              style={{ ...addActionButtonStyle, textDecoration: "none" }}
+            >
+              Excel
+            </a>
+            <AddActionButton
+              onClick={() => {
+                const fastProjectId = getFastEntryProjectId();
+                const fastWorkstreamId = getFastEntryWorkstreamId(fastProjectId);
+                setSelectedProject(fastProjectId);
+                setSelectedProjectWorkstream(fastWorkstreamId);
+                setIsCreating(true);
+              }}
+            >
+              {t("timeTracking.newTimeEntry")}
+            </AddActionButton>
+          </SectionHeaderActions>
         }
       />
 

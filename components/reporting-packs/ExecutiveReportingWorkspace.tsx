@@ -14,8 +14,12 @@ import { ReportingPackTable } from "@/components/reporting-packs/ReportingPackTa
 import type {
   ReportingPackAction,
   ReportingPackCommand,
+  ReportingPackNarrativeCopyAction,
   ReportingPackSummary,
   ReportingWorkspaceProject,
+  ManagedNarrativeSummary,
+  NarrativeLifecycleAction,
+  ReportingPackNarrativeGenerationAction,
 } from "@/components/reporting-packs/types";
 
 type ExecutiveReportingWorkspaceProps = {
@@ -24,6 +28,12 @@ type ExecutiveReportingWorkspaceProps = {
   createFirstReportingPack: ReportingPackCommand;
   createReportingPackFromLatest: ReportingPackCommand;
   updateReportingPack: ReportingPackAction;
+  copyPreviousReportingPackNarrative: ReportingPackNarrativeCopyAction;
+  managedNarratives: ManagedNarrativeSummary[];
+  submitReportingPackNarrativeForReview: NarrativeLifecycleAction;
+  reviewNarrativeProposal: NarrativeLifecycleAction;
+  updateNarrativeProposal: NarrativeLifecycleAction;
+  generateReportingPackNarrativeProposals: ReportingPackNarrativeGenerationAction;
   archiveReportingPack: ReportingPackCommand;
   deleteDraftReportingPack: ReportingPackCommand;
 };
@@ -34,6 +44,12 @@ export function ExecutiveReportingWorkspace({
   createFirstReportingPack,
   createReportingPackFromLatest,
   updateReportingPack,
+  copyPreviousReportingPackNarrative,
+  managedNarratives,
+  submitReportingPackNarrativeForReview,
+  reviewNarrativeProposal,
+  updateNarrativeProposal,
+  generateReportingPackNarrativeProposals,
   archiveReportingPack,
   deleteDraftReportingPack,
 }: ExecutiveReportingWorkspaceProps) {
@@ -48,12 +64,20 @@ export function ExecutiveReportingWorkspace({
   const canCreateNextDraft = reportingPacks.some(
     (pack) => pack.isActive && canCopyToNextDraft(pack.status ?? "")
   );
+  const projectLabel = project.projectCode
+    ? `${project.projectCode} - ${project.name}`
+    : project.name;
 
   return (
     <section id="executive-reporting-workspace" style={{ ...sectionPanelStyle, marginTop: "1rem" }}>
       <div style={sectionHeaderStyle}>
-        <div style={sectionTitleStyle}>
-          {t("report.executiveReportingWorkspace")}
+        <div style={{ display: "grid", gap: "0.15rem" }}>
+          <div style={sectionTitleStyle}>
+            {t("report.executiveReportingWorkspace")}
+          </div>
+          <div style={{ color: "#334155", fontSize: "0.9rem", fontWeight: 700 }}>
+            {projectLabel}
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: "0.35rem" }}>
@@ -111,6 +135,14 @@ export function ExecutiveReportingWorkspace({
               project={project}
               pack={selectedPack}
               updateReportingPack={updateReportingPack}
+              copyPreviousReportingPackNarrative={
+                copyPreviousReportingPackNarrative
+              }
+              managedNarratives={managedNarratives}
+              submitReportingPackNarrativeForReview={submitReportingPackNarrativeForReview}
+              reviewNarrativeProposal={reviewNarrativeProposal}
+              updateNarrativeProposal={updateNarrativeProposal}
+              generateReportingPackNarrativeProposals={generateReportingPackNarrativeProposals}
             />
           )}
         </>

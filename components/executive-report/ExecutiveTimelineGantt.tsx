@@ -23,6 +23,7 @@ import { useTranslation } from "@/components/i18n/TranslationProvider";
 type ExecutiveTimelineGanttProps = {
   projectWorkstreams: ExecutiveReportWorkstream[];
   projectEvents?: ExecutiveReportEvent[];
+  briefingMode?: boolean;
 };
 
 const timelineCellStyle: React.CSSProperties = {
@@ -199,9 +200,11 @@ function TimelineMarkers({ markers }: { markers: ExecutiveGanttMarker[] }) {
 export function ExecutiveTimelineGantt({
   projectWorkstreams,
   projectEvents = [],
+  briefingMode = false,
 }: ExecutiveTimelineGanttProps) {
   const { t } = useTranslation();
   const [viewMode, setViewMode] = useState<ExecutiveGanttViewMode>("EXECUTIVE");
+  const [phasesOnly, setPhasesOnly] = useState(briefingMode);
   const model = useMemo(
     () =>
       buildExecutiveGanttModel({
@@ -229,6 +232,9 @@ export function ExecutiveTimelineGantt({
     t("timeline.legend.actual"),
     t("timeline.legend.delay"),
   ];
+  const visibleRows = phasesOnly
+    ? model.rows.filter((row) => row.kind === "phase" || row.kind === "milestone")
+    : model.rows;
 
   return (
     <section className="section-panel">
@@ -240,9 +246,13 @@ export function ExecutiveTimelineGantt({
           alignItems: "center",
         }}
       >
-        <div style={sectionTitleStyle}>{t("report.timeline")}</div>
+        {!briefingMode && <div style={sectionTitleStyle}>{t("report.timeline")}</div>}
         <div style={{ display: "flex", gap: "0.5rem" }}>
-          {(["EXECUTIVE", "DETAILED", "ALL"] as ExecutiveGanttViewMode[]).map((mode) => (
+          {briefingMode ? (
+            <button type="button" onClick={() => setPhasesOnly((value) => !value)} style={buttonStyle}>
+              {phasesOnly ? "Show detail" : "Phases only"}
+            </button>
+          ) : (["EXECUTIVE", "DETAILED", "ALL"] as ExecutiveGanttViewMode[]).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -294,7 +304,7 @@ export function ExecutiveTimelineGantt({
                 style={{
                   display: "grid",
                   gridTemplateColumns: `repeat(${model.weeks.length}, 1fr)`,
-                  minWidth: "520px",
+                  minWidth: briefingMode ? "300px" : "520px",
                 }}
               >
                 {model.monthGroups.map((month) => (
@@ -329,7 +339,7 @@ export function ExecutiveTimelineGantt({
           </tr>
         </thead>
         <tbody>
-          {model.rows.map((row) => (
+          {visibleRows.map((row) => (
             <tr key={`gantt-row-${row.id}`}>
               <td
                 style={{
@@ -339,7 +349,7 @@ export function ExecutiveTimelineGantt({
                   whiteSpace: "nowrap",
                 }}
               >
-                {row.kind === "phase" ? `▼ ${row.phase}` : row.phase}
+                {row.kind === "phase" ? `${phasesOnly ? "" : "▼ "}${row.phase}` : row.phase}
               </td>
               <td
                 style={{
@@ -358,7 +368,7 @@ export function ExecutiveTimelineGantt({
                 }}
               >
                 {row.kind === "task" ? `${t("labels.task")}: ` : row.kind === "subtask" ? `${t("labels.subtask")}: ` : ""}
-                {row.name}
+                {briefingMode && phasesOnly && row.kind === "phase" ? "" : row.name}
               </td>
               <td
                 style={{

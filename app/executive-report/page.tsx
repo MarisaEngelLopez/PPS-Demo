@@ -53,6 +53,7 @@ export default async function ExecutiveReportPage({
     selectedProjectId,
   });
   const chapterValues: ReportChapter[] = [
+    "briefing",
     "overview",
     "decisions",
     "risks",
@@ -162,6 +163,24 @@ export default async function ExecutiveReportPage({
           }}
         >
           PDF
+        </Link>
+
+        <Link
+          href={`/executive-report/pdf?view=briefing&projectId=${selectedProjectId}${
+            selectedReportingPack?.id ? `&reportingPackId=${selectedReportingPack.id}` : ""
+          }`}
+          style={{ padding: "0.35rem 0.65rem", borderRadius: "6px", border: "1px solid #cbd5e1", background: "#ffffff", color: "#111827", textDecoration: "none", fontSize: "0.8rem" }}
+        >
+          Briefing PDF
+        </Link>
+
+        <Link
+          href={`/executive-report/pptx?view=briefing&projectId=${selectedProjectId}${
+            selectedReportingPack?.id ? `&reportingPackId=${selectedReportingPack.id}` : ""
+          }`}
+          style={{ padding: "0.35rem 0.65rem", borderRadius: "6px", border: "1px solid #cbd5e1", background: "#ffffff", color: "#111827", textDecoration: "none", fontSize: "0.8rem" }}
+        >
+          Briefing PPT
         </Link>
 
         <Link

@@ -13,6 +13,11 @@ import {
   createFirstReportingPack,
   createReportingPackFromLatest,
   updateReportingPack,
+  copyPreviousReportingPackNarrative,
+  submitReportingPackNarrativeForReview,
+  reviewNarrativeProposal,
+  updateNarrativeProposal,
+  generateReportingPackNarrativeProposals,
   archiveReportingPack,
   deleteDraftReportingPack,
 } from "@/app/reporting-packs/actions";
@@ -34,6 +39,10 @@ import {
 import { getProjectDetailPageData } from "@/lib/domain/projects/projectQueries";
 import { translate } from "@/lib/i18n/dictionaries";
 import { getServerLocale } from "@/lib/i18n/server";
+import { toManagedNarrativeSummary } from "@/lib/domain/narrative/narrativeRepository";
+import { getExecutiveReportProject } from "@/lib/domain/reporting/executiveReportQueries";
+import ExecutiveReportDashboard from "@/components/executive-report/ExecutiveReportDashboard";
+import { ProjectWorkspaceView } from "@/components/projects/ProjectWorkspaceView";
 
 export default async function ProjectDetailPage({
   params,
@@ -54,12 +63,29 @@ const {
   eventTypes,
 } = await getProjectDetailPageData(id);
 
+const executiveProject = await getExecutiveReportProject(id);
+
 if (!project) {
   notFound();
 }
 
+const selectedReportingPack = executiveProject?.reportingPacks[0] ?? null;
+
     return (
     <main style={pageStyle}>
+      <ProjectWorkspaceView
+        briefing={
+          executiveProject ? (
+            <ExecutiveReportDashboard
+              project={executiveProject}
+              reportingPack={selectedReportingPack}
+              activeChapter="briefing"
+              embedded
+            />
+          ) : null
+        }
+        management={
+          <>
 
       <div
   style={{
@@ -85,16 +111,6 @@ if (!project) {
  projectStatusOptions={projectStatusOptions}
  organizations={organizations}
   updateProject={updateProject}
-/>
-
-<ExecutiveReportingWorkspace
-  project={project}
-  reportingPacks={project.reportingPacks ?? []}
-  createFirstReportingPack={createFirstReportingPack}
-  createReportingPackFromLatest={createReportingPackFromLatest}
-  updateReportingPack={updateReportingPack}
-  archiveReportingPack={archiveReportingPack}
-  deleteDraftReportingPack={deleteDraftReportingPack}
 />
 
 <div id="workstreams" />
@@ -137,8 +153,29 @@ projectWorkstreams={projectWorkstreams}
   projectEvents={projectEvents.filter((event) => event.isActive)}
 />
 </div>
-
-
+          </>
+        }
+        narrativeManagement={
+          <ExecutiveReportingWorkspace
+            project={project}
+            reportingPacks={project.reportingPacks ?? []}
+            managedNarratives={project.managedNarratives.flatMap((narrative) => {
+              const summary = toManagedNarrativeSummary(narrative);
+              return summary ? [summary] : [];
+            })}
+            createFirstReportingPack={createFirstReportingPack}
+            createReportingPackFromLatest={createReportingPackFromLatest}
+            updateReportingPack={updateReportingPack}
+            copyPreviousReportingPackNarrative={copyPreviousReportingPackNarrative}
+            submitReportingPackNarrativeForReview={submitReportingPackNarrativeForReview}
+            reviewNarrativeProposal={reviewNarrativeProposal}
+            updateNarrativeProposal={updateNarrativeProposal}
+            generateReportingPackNarrativeProposals={generateReportingPackNarrativeProposals}
+            archiveReportingPack={archiveReportingPack}
+            deleteDraftReportingPack={deleteDraftReportingPack}
+          />
+        }
+      />
     </main>
   );
 }

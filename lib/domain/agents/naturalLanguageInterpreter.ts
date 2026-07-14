@@ -1,5 +1,6 @@
 export type NaturalLanguageIntent =
   | "START_WORK_SESSION"
+  | "UPDATE_WORK_SESSION_NOTES"
   | "PAUSE_WORK_SESSION"
   | "RESUME_WORK_SESSION"
   | "FINISH_WORK_SESSION"
@@ -89,6 +90,16 @@ const startWords = [
 ];
 const pauseWords = ["pause", "pausing", "pausar", "pausa"];
 const resumeWords = ["resume", "restart", "continue", "reanudar", "reanudo", "continuar", "continuo", "seguir"];
+const noteWords = [
+  "note",
+  "notes",
+  "comment",
+  "comments",
+  "nota",
+  "notas",
+  "comentario",
+  "comentarios",
+];
 const finishWords = [
   "finish",
   "finished",
@@ -229,6 +240,32 @@ export function normalizeNaturalLanguage(value: string) {
     .trim();
 }
 
+export function projectReferenceAliases(project: { projectCode: string; name: string }) {
+  const aliases = [project.projectCode, project.name];
+  const normalizedCode = normalizeNaturalLanguage(project.projectCode);
+  const numericMatch = normalizedCode.match(/\b0*([0-9]+)\b/);
+
+  if (numericMatch?.[1]) {
+    const projectNumber = numericMatch[1];
+    aliases.push(
+      `project ${projectNumber}`,
+      `proyecto ${projectNumber}`,
+      `number ${projectNumber}`,
+      `numero ${projectNumber}`,
+      `pr ${projectNumber}`
+    );
+  }
+
+  return aliases;
+}
+
+export function extractExplicitNotes(rawInstruction: string) {
+  const match = rawInstruction.match(
+    /\b(?:with\s+)?(?:note|notes|comment|comments|nota|notas|comentario|comentarios)\s*(?:is|are|es|son|:|-)?\s+(.+)$/i
+  );
+  return match?.[1]?.trim() || null;
+}
+
 export function detectNaturalLanguageLanguage(
   rawInstruction: string
 ): NaturalLanguageDetectedLanguage {
@@ -254,6 +291,7 @@ export function detectNaturalLanguageIntent(rawInstruction: string): NaturalLang
   if (resumeWords.some((word) => text.includes(word))) return "RESUME_WORK_SESSION";
   if (finishWords.some((word) => text.includes(word))) return "FINISH_WORK_SESSION";
   if (startWords.some((word) => text.includes(word))) return "START_WORK_SESSION";
+  if (noteWords.some((word) => text.includes(word))) return "UPDATE_WORK_SESSION_NOTES";
   return "UNKNOWN";
 }
 
@@ -398,6 +436,35 @@ export function extractPhaseReference(rawInstruction: string) {
   const text = normalizeNaturalLanguage(rawInstruction);
   const match = text.match(/\b(phase|fase)\s+([0-9]+)\b/);
   return match?.[2] ?? null;
+}
+
+export function extractPositionReference(rawInstruction: string) {
+  const text = normalizeNaturalLanguage(rawInstruction);
+  if (!text) return null;
+
+  if (/\b(last|latest|previous|ultimo|ultima|anterior)\b/.test(text)) return "LAST";
+  if (/\b(first|primer|primera|primero)\b/.test(text)) return 0;
+  if (/\b(second|segundo|segunda)\b/.test(text)) return 1;
+  if (/\b(third|tercer|tercera|tercero)\b/.test(text)) return 2;
+
+  const numeric = text.match(/\b(number|numero)\s+([0-9]+)\b/);
+  if (numeric?.[2]) {
+    const index = Number(numeric[2]) - 1;
+    return Number.isFinite(index) && index >= 0 ? index : null;
+  }
+
+  return null;
+}
+
+export function getPositionReferencedCandidate<T extends { id: string; label: string }>(
+  rawInstruction: string,
+  records: T[]
+) {
+  const position = extractPositionReference(rawInstruction);
+  if (position === null || records.length === 0) return null;
+  const index = position === "LAST" ? records.length - 1 : position;
+  const record = records[index];
+  return record ? { id: record.id, label: record.label, score: 7 } : null;
 }
 
 export function rankNaturalLanguageCandidates(

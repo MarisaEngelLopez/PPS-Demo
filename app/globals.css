@@ -123,3 +123,52 @@ a {
     min-height: 40px;
   }
 }
+.embedded-executive-briefing > .highlighted-section-panel,
+.embedded-executive-briefing > #executive-summary > div:first-child,
+.embedded-executive-briefing > #executive-summary aside,
+.embedded-executive-briefing > #executive-summary main > div:first-child {
+  display: none !important;
+}
+
+.embedded-executive-briefing > #executive-summary {
+  border: 0;
+  box-shadow: none;
+  margin: 0;
+  padding: 0;
+}
+
+.embedded-executive-briefing > #executive-summary > div:last-child > div {
+  display: block !important;
+}
+
+.embedded-executive-briefing > #executive-summary main {
+  min-width: 0;
+  width: 100%;
+}
+
+.briefing-content-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.briefing-half-row {
+  grid-column: span 2;
+  min-width: 0;
+}
+
+@media (max-width: 1000px) {
+  .briefing-content-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .briefing-content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .briefing-half-row {
+    grid-column: span 1;
+  }
+}

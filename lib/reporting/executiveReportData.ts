@@ -9,6 +9,7 @@ import {
   getWorkstreamStatus,
 } from "@/lib/domain/reporting/executiveReportRules";
 import { buildExecutiveReportViewModel } from "@/lib/domain/reporting/executiveReportViewModel";
+import { getManagedNarrativeAssetText } from "@/lib/domain/narrative/narrativeRepository";
 import { translate } from "@/lib/i18n/dictionaries";
 import type { AppLocale } from "@/lib/i18n/locales";
 import {
@@ -81,6 +82,7 @@ export async function getExecutiveReportData({
   const reportModel = buildExecutiveReportViewModel({
     project,
     reportingPack,
+    narrativeLanguage: locale === "es" ? "ES" : "EN",
   });
 
   const workstreams = reportModel.projectWorkstreams.map((item) => ({
@@ -146,25 +148,38 @@ export async function getExecutiveReportData({
       critical: decisions.filter((decision) => decision.impact === "CRITICAL").length,
     },
   };
+  const detailedNarrative = (
+    objectKey:
+      | "executive-summary"
+      | "accomplishments"
+      | "issues-concerns"
+      | "next-steps"
+      | "management-ask"
+      | "conclusion"
+  ) =>
+    getManagedNarrativeAssetText(reportModel.narrativeAssets, {
+      objectKey,
+      variant: "DETAILED",
+    });
 
   const sections = [
     {
       id: "executive-summary",
       title: getExecutiveReportSectionTitle({ id: "executive-summary", title: "" }, t),
       type: "narrative",
-      content: reportingPack?.executiveSummary ?? null,
+      content: detailedNarrative("executive-summary"),
     },
     {
       id: "achievements",
       title: getExecutiveReportSectionTitle({ id: "achievements", title: "" }, t),
       type: "narrative",
-      content: reportingPack?.achievements ?? null,
+      content: detailedNarrative("accomplishments"),
     },
     {
       id: "issues",
       title: getExecutiveReportSectionTitle({ id: "issues", title: "" }, t),
       type: "narrative",
-      content: reportingPack?.issues ?? null,
+      content: detailedNarrative("issues-concerns"),
     },
     {
       id: "decision-attention",
@@ -215,19 +230,19 @@ export async function getExecutiveReportData({
       id: "next-steps",
       title: getExecutiveReportSectionTitle({ id: "next-steps", title: "" }, t),
       type: "narrative",
-      content: reportingPack?.nextSteps ?? null,
+      content: detailedNarrative("next-steps"),
     },
     {
       id: "management-ask",
       title: getExecutiveReportSectionTitle({ id: "management-ask", title: "" }, t),
       type: "narrative",
-      content: reportingPack?.managementAsk ?? null,
+      content: detailedNarrative("management-ask"),
     },
     {
       id: "conclusion",
       title: getExecutiveReportSectionTitle({ id: "conclusion", title: "" }, t),
       type: "narrative",
-      content: reportingPack?.conclusion ?? null,
+      content: detailedNarrative("conclusion"),
     },
   ].filter((section) => {
     if (section.type === "narrative") return Boolean(section.content);

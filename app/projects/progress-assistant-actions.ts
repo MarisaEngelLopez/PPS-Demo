@@ -30,8 +30,10 @@ import { getOneUserAgentUser } from "@/lib/domain/agents/timeTrackingAgent";
 import {
   extractPhaseReference,
   getCandidateConfidence,
+  getPositionReferencedCandidate,
   normalizeNaturalLanguage,
   parseProjectProgressNaturalLanguage,
+  projectReferenceAliases,
   rankNaturalLanguageCandidates,
 } from "@/lib/domain/agents/naturalLanguageInterpreter";
 import { normalizeProjectVisibility } from "@/lib/domain/projectExecution/projectExecutionRules";
@@ -448,10 +450,7 @@ export async function interpretProjectProgressInstruction(formData: FormData) {
       orderBy: [{ projectCode: "asc" }, { name: "asc" }],
     }),
     prisma.projectWorkstream.findMany({
-      where: {
-        isActive: true,
-        ...(selectedProjectId ? { projectId: selectedProjectId } : {}),
-      },
+      where: { isActive: true },
       include: { project: true, workstream: { include: { phase: true } } },
       orderBy: [
         { project: { projectCode: "asc" } },
@@ -460,20 +459,37 @@ export async function interpretProjectProgressInstruction(formData: FormData) {
       ],
     }),
     prisma.projectEvent.findMany({
-      where: {
-        isActive: true,
-        ...(selectedProjectId ? { projectId: selectedProjectId } : {}),
-      },
+      where: { isActive: true },
       include: { project: true },
       orderBy: [{ project: { projectCode: "asc" } }, { eventDate: "asc" }],
     }),
   ]);
 
+  const projectCandidates = rankNaturalLanguageCandidates(
+    rawInstruction,
+    projects.map((project) => ({
+      id: project.id,
+      label: projectLabel(project),
+      aliases: projectReferenceAliases(project),
+    }))
+  );
+  const spokenProjectId = projectCandidates[0]?.score >= 4 ? projectCandidates[0].id : null;
+  const defaultProjectId = projects.some((project) => project.id === selectedProjectId)
+    ? selectedProjectId
+    : null;
+  const effectiveProjectId = spokenProjectId ?? defaultProjectId;
+  const projectScopedWorkstreams = effectiveProjectId
+    ? projectWorkstreams.filter((workstream) => workstream.projectId === effectiveProjectId)
+    : projectWorkstreams;
+  const projectScopedEvents = effectiveProjectId
+    ? projectEvents.filter((event) => event.projectId === effectiveProjectId)
+    : projectEvents;
+
   const phaseFilteredWorkstreamPool = phaseReference
-    ? projectWorkstreams.filter((workstream) =>
+    ? projectScopedWorkstreams.filter((workstream) =>
         phaseNameMatchesReference(workstream.workstream.phase?.name, phaseReference)
       )
-    : projectWorkstreams;
+    : projectScopedWorkstreams;
 
   if (targetType === "WORKSTREAM" && phaseReference && phaseFilteredWorkstreamPool.length === 0) {
     return {
@@ -500,7 +516,7 @@ export async function interpretProjectProgressInstruction(formData: FormData) {
   const workstreamPool =
     targetType === "WORKSTREAM" && phaseReference && phaseFilteredWorkstreamPool.length > 0
       ? phaseFilteredWorkstreamPool
-      : projectWorkstreams;
+      : projectScopedWorkstreams;
   const uniquePhaseWorkstream =
     targetType === "WORKSTREAM" && phaseReference && phaseFilteredWorkstreamPool.length === 1
       ? phaseFilteredWorkstreamPool[0]
@@ -518,7 +534,7 @@ export async function interpretProjectProgressInstruction(formData: FormData) {
       };
     });
 
-  const eventRecords = projectEvents.map((event) => {
+  const eventRecords = projectScopedEvents.map((event) => {
     const name = event.reportingName || event.customName || event.name;
     return {
       id: event.id,
@@ -529,6 +545,8 @@ export async function interpretProjectProgressInstruction(formData: FormData) {
 
   const workstreamCandidates = rankNaturalLanguageCandidates(rawInstruction, workstreamRecords);
   const eventCandidates = rankNaturalLanguageCandidates(rawInstruction, eventRecords);
+  const positionReferencedWorkstream = getPositionReferencedCandidate(rawInstruction, workstreamRecords);
+  const positionReferencedEvent = getPositionReferencedCandidate(rawInstruction, eventRecords);
   const effectiveWorkstreamCandidates =
     uniquePhaseWorkstream && workstreamCandidates.length === 0
       ? [
@@ -540,19 +558,25 @@ export async function interpretProjectProgressInstruction(formData: FormData) {
             score: 8,
           },
         ]
+      : workstreamCandidates.length === 0 && positionReferencedWorkstream
+        ? [positionReferencedWorkstream]
       : workstreamCandidates;
+  const effectiveEventCandidates =
+    eventCandidates.length === 0 && positionReferencedEvent
+      ? [positionReferencedEvent]
+      : eventCandidates;
   const candidates =
-    targetType === "WORKSTREAM" ? effectiveWorkstreamCandidates : eventCandidates;
+    targetType === "WORKSTREAM" ? effectiveWorkstreamCandidates : effectiveEventCandidates;
   const confidence = getCandidateConfidence(candidates);
   const targetId = candidates[0]?.id ?? "";
 
   const targetProjectWorkstream =
     targetType === "WORKSTREAM"
-      ? projectWorkstreams.find((workstream) => workstream.id === targetId)
+      ? projectScopedWorkstreams.find((workstream) => workstream.id === targetId)
       : null;
   const targetEvent =
     targetType === "EVENT"
-      ? projectEvents.find((event) => event.id === targetId)
+      ? projectScopedEvents.find((event) => event.id === targetId)
       : null;
   const target = targetProjectWorkstream ?? targetEvent;
 
@@ -574,7 +598,7 @@ export async function interpretProjectProgressInstruction(formData: FormData) {
             : "Choose a milestone candidate before creating the suggestion.",
         candidates: {
           workstreams: effectiveWorkstreamCandidates,
-          events: eventCandidates,
+          events: effectiveEventCandidates,
         },
       },
     };
@@ -614,7 +638,7 @@ export async function interpretProjectProgressInstruction(formData: FormData) {
       }),
       candidates: {
         workstreams: effectiveWorkstreamCandidates,
-        events: eventCandidates,
+        events: effectiveEventCandidates,
       },
     },
   };

@@ -13,7 +13,15 @@ import {
 } from "@/lib/domain/reporting/executiveGanttModel";
 import { EXECUTIVE_GANTT_OUTPUT_CONTRACT } from "@/lib/domain/reporting/executiveGanttOutputContract";
 import { chunkNarrativeText } from "@/lib/domain/reporting/narrativePagination";
+import {
+  formatNarrativePresentationText,
+  getNarrativePresentationItems,
+  type NarrativePresentationMode,
+} from "@/lib/domain/reporting/narrativePresentation";
 import { buildExecutiveReportViewModel } from "@/lib/domain/reporting/executiveReportViewModel";
+import { buildExecutiveBriefingModel } from "@/lib/domain/reporting/executiveBriefingModel";
+import { findManagedNarrativeAsset } from "@/lib/domain/narrative/narrativeRepository";
+import { resolveNarrativePresentationMode } from "@/lib/domain/narrative/narrativeDocument";
 import {
   cockpitMetricToneColors,
   sortCockpitMetrics,
@@ -311,9 +319,14 @@ function addNarrativeSlide(
   page: number,
   title: string,
   text?: string | null,
-  kicker = "EXECUTIVE REPORT"
+  kicker = "EXECUTIVE REPORT",
+  mode: NarrativePresentationMode = "BULLETS"
 ) {
-  const chunks = chunkNarrativeText(text, {
+  const presentationText = formatNarrativePresentationText(text, mode)
+    .replace(/^✓ /gmu, "✓   ")
+    .replace(/^• /gmu, "•   ")
+    .replace(/^\s+◦ /gmu, "      ◦   ");
+  const chunks = chunkNarrativeText(presentationText, {
     maxVisualLines: PPT_NARRATIVE_MAX_VISUAL_LINES,
     approximateCharsPerLine: PPT_NARRATIVE_APPROX_CHARS_PER_LINE,
   });
@@ -325,17 +338,19 @@ function addNarrativeSlide(
     slide.background = { color: "FFFFFF" };
     addTitle(slide, title, kicker);
     slide.addText(chunk, {
-      x: 0.9,
-      y: 1.35,
-      w: 11.55,
-      h: 4.95,
-      fontSize: 13,
+      x: mode === "CHECKPOINTS" ? 2.05 : 0.9,
+      y: mode === "CHECKPOINTS" ? 1.75 : 1.35,
+      w: mode === "CHECKPOINTS" ? 9.25 : 11.55,
+      h: mode === "CHECKPOINTS" ? 3.9 : 4.95,
+      fontSize: mode === "CHECKPOINTS" ? 18 : 13,
       color: COLORS.ink,
-      valign: "top",
+      valign: mode === "CHECKPOINTS" ? "middle" : "top",
+      align: "left",
       breakLine: false,
       margin: 0.16,
-      fill: { color: COLORS.panel },
-      line: { color: COLORS.border, width: 1 },
+      fill: mode === "CHECKPOINTS" ? undefined : { color: COLORS.panel },
+      line: mode === "CHECKPOINTS" ? undefined : { color: COLORS.border, width: 1 },
+      paraSpaceAfter: mode === "CHECKPOINTS" ? 8 : 5,
     });
     addFooter(slide, project, nextPage);
     nextPage += 1;
@@ -1121,18 +1136,31 @@ export async function createExecutiveReportPptx({
   reportingPack,
   locale,
   riskReviewTypeHints = [],
+  briefingOnly = false,
 }: {
   project: ExecutiveReportProject;
   reportingPack: ExecutiveReportReportingPack | null;
   locale: AppLocale;
   riskReviewTypeHints?: string[];
+  briefingOnly?: boolean;
 }) {
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key);
   const report = buildExecutiveReportViewModel({
     project,
     reportingPack,
     pdfMode: true,
+    includeDraftNarratives: true,
   });
+  const briefing = buildExecutiveBriefingModel({ project, reportingPack, report, locale });
+  const detailedNarrativeAsset = (objectKey: "executive-summary" | "accomplishments" | "issues-concerns" | "next-steps" | "management-ask" | "conclusion") =>
+    findManagedNarrativeAsset(report.narrativeAssets, { objectKey, variant: "DETAILED" });
+  const detailedNarrative = (objectKey: Parameters<typeof detailedNarrativeAsset>[0]) =>
+    detailedNarrativeAsset(objectKey)?.content ?? null;
+  const detailedNarrativeMode = (objectKey: Parameters<typeof detailedNarrativeAsset>[0]) =>
+    resolveNarrativePresentationMode({
+      preference: detailedNarrativeAsset(objectKey)?.presentationMode,
+      objectKey,
+    });
 
   const pptx = new pptxgen();
   pptx.layout = "LAYOUT_WIDE";
@@ -1146,6 +1174,198 @@ export async function createExecutiveReportPptx({
   };
 
   let page = 1;
+
+  const briefingNarrativeText = (content: string | null, checkpoints = false) =>
+    getNarrativePresentationItems(content, checkpoints ? "CHECKPOINTS" : "BULLETS")
+      .flatMap((item) => [
+        `${checkpoints ? "✓" : "•"}   ${item.text}`,
+        ...item.children.map((child) => `      ◦   ${child}`),
+      ])
+      .join("\n");
+  const addBriefingCard = (slide: pptxgen.Slide, title: string, body: string, x: number, y: number, w: number, h: number) => {
+    slide.addShape("rect", { x, y, w, h, fill: { color: "FFFFFF" }, line: { color: COLORS.border, width: 1 } });
+    slide.addText(title, { x: x + 0.12, y: y + 0.07, w: w - 0.24, h: 0.18, fontSize: 9.2, bold: true, color: COLORS.ink, margin: 0, fit: "shrink" });
+    slide.addShape("line", { x: x + 0.12, y: y + 0.31, w: w - 0.24, h: 0, line: { color: COLORS.border, width: 0.6 } });
+    if (body) {
+      slide.addText(body, { x: x + 0.12, y: y + 0.38, w: w - 0.24, h: h - 0.45, fontSize: 6.8, color: COLORS.ink, margin: 0, breakLine: false, valign: "top", fit: "shrink", paraSpaceAfter: 1.5 });
+    }
+  };
+  type BriefingMetricTile = {
+    label: string;
+    value: string | number;
+    fill?: string;
+    border?: string;
+    group?: CockpitMetricGroup;
+  };
+  const addBriefingMetricTiles = (
+    slide: pptxgen.Slide,
+    title: string,
+    metrics: BriefingMetricTile[],
+    x: number,
+    y: number,
+    w: number,
+    h: number
+  ) => {
+    addBriefingCard(slide, title, "", x, y, w, h);
+    const gap = 0.05;
+    const visibleMetrics = metrics.slice(0, 9);
+    const lifecycleMetrics = visibleMetrics.filter((metric) => metric.group !== "attention");
+    const attentionMetrics = visibleMetrics.filter((metric) => metric.group === "attention");
+    const metricGroups = attentionMetrics.length > 0
+      ? [lifecycleMetrics, attentionMetrics].filter((group) => group.length > 0)
+      : [visibleMetrics];
+    const contentTop = y + 0.39;
+    const contentH = h - 0.48;
+    const groupGap = metricGroups.length > 1 ? 0.07 : 0;
+    const columns = visibleMetrics.length > 4 ? 3 : 2;
+    const totalRows = metricGroups.reduce(
+      (sum, group) => sum + Math.ceil(group.length / columns),
+      0
+    );
+    const tileW = (w - 0.24 - gap * (columns - 1)) / columns;
+    const tileH = Math.min(
+      0.3,
+      (contentH - groupGap * Math.max(metricGroups.length - 1, 0) - gap * Math.max(totalRows - metricGroups.length, 0)) / Math.max(totalRows, 1)
+    );
+    let rowOffset = 0;
+
+    metricGroups.forEach((group, groupIndex) => {
+      const groupY = contentTop + rowOffset * (tileH + gap) + groupIndex * groupGap;
+      group.forEach((metric, index) => {
+        const tileX = x + 0.12 + (index % columns) * (tileW + gap);
+        const tileY = groupY + Math.floor(index / columns) * (tileH + gap);
+        slide.addShape("roundRect", {
+          x: tileX,
+          y: tileY,
+          w: tileW,
+          h: tileH,
+          rectRadius: 0.03,
+          fill: { color: metric.fill ?? COLORS.panel },
+          line: { color: metric.border ?? COLORS.border, width: 0.6 },
+        });
+        slide.addText(metric.label, {
+          x: tileX + 0.04,
+          y: tileY + 0.03,
+          w: tileW * 0.62,
+          h: Math.max(0.05, tileH - 0.04),
+          fontSize: columns === 3 ? 4.4 : 5.6,
+          bold: true,
+          color: COLORS.muted,
+          margin: 0,
+          fit: "shrink",
+        });
+        slide.addText(String(metric.value), {
+          x: tileX + tileW * 0.68,
+          y: tileY + 0.03,
+          w: tileW * 0.25,
+          h: Math.max(0.05, tileH - 0.04),
+          fontSize: columns === 3 ? 8 : 10.5,
+          bold: true,
+          color: COLORS.ink,
+          margin: 0,
+          align: "right",
+          fit: "shrink",
+        });
+      });
+      rowOffset += Math.ceil(group.length / columns);
+    });
+  };
+  const toBriefingMetricTiles = (metrics: CockpitMetric[]) =>
+    sortCockpitMetrics(translateCockpitMetrics(metrics, t)).map((metric) => {
+      const colors = cockpitMetricToneColors[metric.tone];
+      return {
+        label: metric.label,
+        value: metric.value,
+        group: metric.group,
+        fill: pptColor(colors.background),
+        border: pptColor(colors.border),
+      };
+    });
+  const addBriefingSlide = (slidePage: number) => {
+    const slide = pptx.addSlide();
+    slide.background = { color: "FFFFFF" };
+    addTitle(slide, project.name, t("report.executiveBriefing").toUpperCase());
+    const gantt = buildExecutiveGanttModel({
+      projectWorkstreams: report.projectWorkstreams,
+      projectEvents: briefing.timelineEvents,
+      today: report.reportDate,
+    });
+    const timelineRows = gantt?.rows.filter((row) => row.kind === "phase" || row.kind === "milestone") ?? [];
+    const timelineTop = 1.12;
+    const timelineHeaderTop = 1.33;
+    const rowsTop = 1.62;
+    const timelineBottom = 3.72;
+    const labelW = 3.05;
+    const varianceW = 1.05;
+    const gridX = 0.55 + labelW + varianceW + 0.12;
+    const gridW = 12.17 - labelW - varianceW - 0.12;
+    const rowHeight = Math.min(0.24, (timelineBottom - rowsTop) / Math.max(timelineRows.length, 1));
+    slide.addText(t("report.timeline"), { x: 0.45, y: timelineTop, w: 2.0, h: 0.16, fontSize: 9, bold: true, color: COLORS.ink, margin: 0 });
+    slide.addText(`${t("timeline.range")}: ${formatReportDate(gantt?.min)} -> ${formatReportDate(gantt?.max)}`, { x: 2.1, y: timelineTop + 0.01, w: 3.0, h: 0.13, fontSize: 6.5, color: COLORS.muted, margin: 0, fit: "shrink" });
+    slide.addText(getLocalizedGanttLegend(t).join("   "), { x: 5.15, y: timelineTop + 0.01, w: 7.45, h: 0.13, fontSize: 6.2, color: COLORS.muted, margin: 0, fit: "shrink" });
+    slide.addShape("rect", { x: 0.45, y: timelineHeaderTop - 0.06, w: 12.27, h: timelineBottom - timelineHeaderTop + 0.06, fill: { color: "F8FAFC" }, line: { color: COLORS.border, width: 0.6 } });
+    gantt?.monthGroups.forEach((month, index) => {
+      const weeksBefore = gantt.monthGroups.slice(0, index).reduce((sum, item) => sum + item.count, 0);
+      const x = gridX + gridW * weeksBefore / gantt.weeks.length;
+      const w = gridW * month.count / gantt.weeks.length;
+      slide.addText(month.label, { x, y: timelineHeaderTop, w, h: 0.12, fontSize: 6.2, bold: true, align: "center", color: COLORS.ink, margin: 0, fit: "shrink" });
+    });
+    gantt?.weeks.forEach((week, index) => {
+      const x = gridX + gridW * index / gantt.weeks.length;
+      slide.addShape("line", { x, y: timelineHeaderTop + 0.23, w: 0, h: timelineBottom - timelineHeaderTop - 0.23, line: { color: "E5E7EB", width: 0.35 } });
+      slide.addText(String(week.getDate()).padStart(2, "0"), { x, y: timelineHeaderTop + 0.14, w: gridW / gantt.weeks.length, h: 0.1, fontSize: 5.6, color: COLORS.muted, align: "center", margin: 0 });
+    });
+    timelineRows.forEach((row, index) => {
+      const y = rowsTop + index * rowHeight;
+      slide.addShape("rect", { x: 0.45, y, w: 12.27, h: rowHeight, fill: { color: row.kind === "phase" ? "F1F5F9" : "FFFFFF", transparency: row.kind === "phase" ? 0 : 28 }, line: { color: "FFFFFF", transparency: 100 } });
+      slide.addText(row.kind === "phase" ? row.phase : row.name, { x: 0.55, y: y + 0.04, w: labelW, h: Math.max(0.1, rowHeight - 0.04), fontSize: 6.4, bold: row.kind === "phase", color: COLORS.ink, margin: 0, fit: "shrink" });
+      slide.addText(row.variance ? translateVarianceLabel(row.variance.label, t) : "", { x: 0.55 + labelW, y: y + 0.04, w: varianceW, h: Math.max(0.1, rowHeight - 0.04), fontSize: 5.9, bold: Boolean(row.variance), color: COLORS.ink, margin: 0, fit: "shrink" });
+      slide.addShape("line", { x: gridX, y: y + rowHeight - 0.01, w: gridW, h: 0, line: { color: "E2E8F0", width: 0.4 } });
+      row.bars.forEach((bar) => {
+        const style = getPptBarStyle(bar.kind);
+        slide.addShape("rect", { x: gridX + gridW * bar.leftPct / 100, y: y + (bar.kind === "planned" ? rowHeight * 0.28 : rowHeight * 0.58), w: Math.max(0.05, gridW * bar.widthPct / 100), h: Math.max(0.045, rowHeight * 0.22), fill: { color: style.fill }, line: { color: style.fill, transparency: 100 } });
+      });
+      row.markers.forEach((marker) => slide.addShape("ellipse", { x: gridX + gridW * marker.leftPct / 100 - 0.035, y: y + rowHeight * 0.35, w: 0.08, h: 0.08, fill: { color: marker.completed ? COLORS.blue : "9CA3AF" }, line: { color: marker.completed ? COLORS.blue : "9CA3AF" } }));
+    });
+    if (gantt?.todayLeftPct != null) slide.addShape("line", { x: gridX + gridW * gantt.todayLeftPct / 100, y: timelineHeaderTop - 0.02, w: 0, h: timelineBottom - timelineHeaderTop + 0.02, line: { color: "EF4444", width: 1, dashType: "dash" } });
+    const deliveryMetrics = toBriefingMetricTiles([...report.workstreamCockpitMetrics, ...report.milestoneCockpitMetrics].slice(0, 4));
+    const riskMetrics = toBriefingMetricTiles(report.riskCockpitMetrics);
+    const decisionMetrics = toBriefingMetricTiles(report.decisionCockpitMetrics);
+    const cards: Array<[string, string]> = [
+      [t("report.executiveSummary"), briefingNarrativeText(briefing.narratives.executiveSummary, true)],
+      [locale === "es" ? "Estado de entrega" : "Delivery Status", ""],
+      [locale === "es" ? "Pulso del proyecto" : "Project Pulse", ""],
+      [t("report.progressSinceLastReport"), briefingNarrativeText(briefing.narratives.progressSinceLastReport)],
+      [locale === "es" ? "Riesgos" : "Risks", ""],
+      [locale === "es" ? "Decisiones" : "Decisions", ""],
+      [t("report.issuesConcerns"), briefingNarrativeText(briefing.narratives.issuesConcerns)],
+      [t("report.nextSteps"), briefingNarrativeText(briefing.narratives.nextSteps)],
+    ];
+    cards.forEach(([title, body], index) => {
+      const x = 0.45 + (index % 4) * 3.12;
+      const y = 3.84 + Math.floor(index / 4) * 1.06;
+      if (index === 1) {
+        addBriefingMetricTiles(slide, title, deliveryMetrics, x, y, 2.98, 0.98);
+      } else if (index === 2) {
+        addBriefingMetricTiles(slide, title, briefing.pulse.map((item) => ({ label: item.label, value: item.value })), x, y, 2.98, 0.98);
+      } else if (index === 4) {
+        addBriefingMetricTiles(slide, title, riskMetrics, x, y, 2.98, 1.06);
+      } else if (index === 5) {
+        addBriefingMetricTiles(slide, title, decisionMetrics, x, y, 2.98, 1.06);
+      } else {
+        addBriefingCard(slide, title, body, x, y, 2.98, 0.98);
+      }
+    });
+    addBriefingCard(slide, t("report.managementAsk"), briefingNarrativeText(briefing.narratives.managementAsk), 0.45, 6.02, 6.05, 0.82);
+    addBriefingCard(slide, t("report.conclusion"), briefingNarrativeText(briefing.narratives.conclusion, true), 6.67, 6.02, 6.05, 0.82);
+    addFooter(slide, project, slidePage);
+  };
+
+  if (briefingOnly) {
+    addBriefingSlide(page);
+    const output = await pptx.write({ outputType: "arraybuffer", compression: true });
+    return Buffer.from(output as ArrayBuffer);
+  }
 
   const cover = pptx.addSlide();
   cover.background = { color: "FFFFFF" };
@@ -1210,6 +1430,9 @@ export async function createExecutiveReportPptx({
 
   page += 1;
 
+  addBriefingSlide(page);
+  page += 1;
+
   const index = pptx.addSlide();
   index.background = { color: "FFFFFF" };
   addTitle(index, t("report.index"), t("report.executiveReport").toUpperCase());
@@ -1249,9 +1472,9 @@ export async function createExecutiveReportPptx({
   addFooter(index, project, page);
   page += 1;
 
-  page = addNarrativeSlide(pptx, project, page, t("report.executiveSummary"), reportingPack?.executiveSummary, t("report.executiveReport").toUpperCase());
-  page = addNarrativeSlide(pptx, project, page, t("report.achievements"), reportingPack?.achievements, t("report.executiveReport").toUpperCase());
-  page = addNarrativeSlide(pptx, project, page, t("report.issuesConcerns"), reportingPack?.issues, t("report.executiveReport").toUpperCase());
+  page = addNarrativeSlide(pptx, project, page, t("report.executiveSummary"), detailedNarrative("executive-summary"), t("report.executiveReport").toUpperCase(), detailedNarrativeMode("executive-summary"));
+  page = addNarrativeSlide(pptx, project, page, t("report.achievements"), detailedNarrative("accomplishments"), t("report.executiveReport").toUpperCase(), detailedNarrativeMode("accomplishments"));
+  page = addNarrativeSlide(pptx, project, page, t("report.issuesConcerns"), detailedNarrative("issues-concerns"), t("report.executiveReport").toUpperCase(), detailedNarrativeMode("issues-concerns"));
 
   if (report.decisions.length > 0) {
     const slide = pptx.addSlide();
@@ -1261,10 +1484,20 @@ export async function createExecutiveReportPptx({
       getExecutiveReportSectionTitle(findReportSection(report, "decision-cockpit"), t),
       t("report.executiveReport").toUpperCase()
     );
+    const decisionAttentionRows = Math.max(report.executiveDecisionAttention.slice(0, 5).length, 1);
+    const decisionOutcomeRows = Math.max(report.recentDecisionOutcomes.slice(0, 3).length, 1);
+    const decisionAttentionHeight = 0.55 + decisionAttentionRows * 0.3;
+    const decisionOutcomeHeight = 0.55 + decisionOutcomeRows * 0.3;
+    const decisionGap = Math.max(
+      0.32,
+      (6.65 - 1.18 - 1.05 - decisionAttentionHeight - decisionOutcomeHeight) / 2
+    );
+    const decisionAttentionTitleY = 1.18 + 1.05 + decisionGap;
+    const decisionOutcomeTitleY = decisionAttentionTitleY + decisionAttentionHeight + decisionGap;
     addCockpitMetrics(slide, report.decisionCockpitMetrics, 1.18, locale);
     slide.addText(t("report.executiveDecisionAttention"), {
       x: SLIDE.marginX,
-      y: 2.62,
+      y: decisionAttentionTitleY,
       w: 6,
       h: 0.2,
       fontSize: 10,
@@ -1285,13 +1518,13 @@ export async function createExecutiveReportPptx({
           translateStatus(decision.statusRef, locale, t),
         ]),
       ],
-      2.9,
+      decisionAttentionTitleY + 0.28,
       [2.3, 4.0, 1.35, 1.05, 1.05, 1.25],
       7
     );
     slide.addText(t("report.recentDecisionOutcomes"), {
       x: SLIDE.marginX,
-      y: 5.25,
+      y: decisionOutcomeTitleY,
       w: 6,
       h: 0.2,
       fontSize: 10,
@@ -1310,7 +1543,7 @@ export async function createExecutiveReportPptx({
           translateStatus(decision.statusRef, locale, t),
         ]),
       ],
-      5.52,
+      decisionOutcomeTitleY + 0.28,
       [2.7, 6.5, 1.45, 1.25],
       7
     );
@@ -1325,10 +1558,18 @@ export async function createExecutiveReportPptx({
     getExecutiveReportSectionTitle(findReportSection(report, "risk-cockpit"), t),
     t("report.executiveReport").toUpperCase()
   );
+  const firstRiskContentHeight = report.attentionRisks.length === 0
+    ? 0.55
+    : report.attentionRisks.reduce(
+        (height, risk) => height + 0.64 + Math.max(risk.riskActions.length, 1) * 0.3,
+        0.35
+      );
+  const riskGap = Math.max(0.35, Math.min(3, 6.65 - 1.14 - 0.7 - firstRiskContentHeight));
+  const riskAttentionTitleY = 1.14 + 0.7 + riskGap;
   addCockpitMetrics(riskSlide, report.riskCockpitMetrics, 1.14, locale);
   riskSlide.addText(t("report.riskAttention"), {
     x: SLIDE.marginX,
-    y: 1.86,
+    y: riskAttentionTitleY,
     w: 5,
     h: 0.2,
     fontSize: 10,
@@ -1338,7 +1579,7 @@ export async function createExecutiveReportPptx({
   });
   riskSlide.addText(t("labels.risk"), {
     x: 0.55,
-    y: 2.08,
+    y: riskAttentionTitleY + 0.22,
     w: 4.4,
     h: 0.12,
     fontSize: 7,
@@ -1348,7 +1589,7 @@ export async function createExecutiveReportPptx({
   });
   riskSlide.addText(t("labels.category"), {
     x: 5.05,
-    y: 2.08,
+    y: riskAttentionTitleY + 0.22,
     w: 1.4,
     h: 0.12,
     fontSize: 7,
@@ -1358,7 +1599,7 @@ export async function createExecutiveReportPptx({
   });
   riskSlide.addText(t("labels.exposure"), {
     x: 6.55,
-    y: 2.08,
+    y: riskAttentionTitleY + 0.22,
     w: 0.7,
     h: 0.12,
     fontSize: 7,
@@ -1368,7 +1609,7 @@ export async function createExecutiveReportPptx({
   });
   riskSlide.addText(t("labels.owner"), {
     x: 7.35,
-    y: 2.08,
+    y: riskAttentionTitleY + 0.22,
     w: 1.5,
     h: 0.12,
     fontSize: 7,
@@ -1378,7 +1619,7 @@ export async function createExecutiveReportPptx({
   });
   riskSlide.addText(t("labels.status"), {
     x: 9.05,
-    y: 2.08,
+    y: riskAttentionTitleY + 0.22,
     w: 1.5,
     h: 0.12,
     fontSize: 7,
@@ -1388,7 +1629,7 @@ export async function createExecutiveReportPptx({
   });
   riskSlide.addText(t("labels.target"), {
     x: 10.75,
-    y: 2.08,
+    y: riskAttentionTitleY + 0.22,
     w: 1.2,
     h: 0.12,
     fontSize: 7,
@@ -1397,7 +1638,7 @@ export async function createExecutiveReportPptx({
     margin: 0,
   });
 
-  let riskY = 2.3;
+  let riskY = riskAttentionTitleY + 0.44;
   report.attentionRisks.forEach((risk, index) => {
     const actionsHeight = 0.26 + Math.max(risk.riskActions.length, 1) * 0.3;
     if (riskY + 0.42 + actionsHeight > 6.75) {
@@ -1443,7 +1684,7 @@ export async function createExecutiveReportPptx({
   if (report.attentionRisks.length === 0) {
     riskSlide.addText(t("report.noExecutiveRiskAttentionItems"), {
       x: SLIDE.marginX,
-      y: 2.2,
+      y: riskAttentionTitleY + 0.44,
       w: 4,
       h: 0.25,
       fontSize: 10,
@@ -1466,7 +1707,7 @@ export async function createExecutiveReportPptx({
     t
   );
 
-  if (report.projectWorkstreams.length > 0) {
+  if (report.projectWorkstreams.length > 0 || report.projectEvents.length > 0) {
     const workstreamSlide = pptx.addSlide();
     workstreamSlide.background = { color: "FFFFFF" };
     addTitle(
@@ -1474,21 +1715,33 @@ export async function createExecutiveReportPptx({
       getExecutiveReportSectionTitle(findReportSection(report, "workstreams"), t),
       t("report.executiveReport").toUpperCase()
     );
-    addCockpitMetrics(workstreamSlide, report.workstreamCockpitMetrics, 1.42, locale);
+    if (report.projectWorkstreams.length > 0) {
+      addCockpitMetrics(workstreamSlide, report.workstreamCockpitMetrics, 1.25, locale);
+    }
+    if (report.projectEvents.length > 0) {
+      workstreamSlide.addShape("line", {
+        x: SLIDE.marginX,
+        y: 3.85,
+        w: 12.4,
+        h: 0,
+        line: { color: COLORS.border, width: 1 },
+      });
+      workstreamSlide.addText(
+        getExecutiveReportSectionTitle(findReportSection(report, "milestones"), t),
+        {
+          x: SLIDE.marginX,
+          y: 4.05,
+          w: 6,
+          h: 0.26,
+          fontSize: 13,
+          bold: true,
+          color: COLORS.ink,
+          margin: 0,
+        }
+      );
+      addCockpitMetrics(workstreamSlide, report.milestoneCockpitMetrics, 4.38, locale);
+    }
     addFooter(workstreamSlide, project, page);
-    page += 1;
-  }
-
-  if (report.projectEvents.length > 0) {
-    const milestoneSlide = pptx.addSlide();
-    milestoneSlide.background = { color: "FFFFFF" };
-    addTitle(
-      milestoneSlide,
-      getExecutiveReportSectionTitle(findReportSection(report, "milestones"), t),
-      t("report.executiveReport").toUpperCase()
-    );
-    addCockpitMetrics(milestoneSlide, report.milestoneCockpitMetrics, 1.42, locale);
-    addFooter(milestoneSlide, project, page);
     page += 1;
   }
 
@@ -1499,54 +1752,13 @@ export async function createExecutiveReportPptx({
     });
 
     if (ganttModel) {
-      const slide = pptx.addSlide();
-      slide.background = { color: "FFFFFF" };
-      addTitle(
-        slide,
-        getExecutiveReportSectionTitle(findReportSection(report, "gantt-detail"), t),
-        t("report.executiveReport").toUpperCase()
-      );
-      slide.addText(t("report.timeline"), {
-        x: 0.55,
-        y: 1.2,
-        w: 6.8,
-        h: 0.24,
-        fontSize: 12,
-        bold: true,
-        color: COLORS.ink,
-        margin: 0,
-      });
-      slide.addText(
-        `${t("timeline.range")}: ${formatReportDate(ganttModel.min)} -> ${formatReportDate(ganttModel.max)}`,
-        {
-          x: 0.55,
-          y: 1.6,
-          w: 5.2,
-          h: 0.18,
-          fontSize: 9,
-          color: COLORS.muted,
-          margin: 0,
-        }
-      );
-      slide.addText(getLocalizedGanttLegend(t).join("   "), {
-        x: 0.55,
-        y: 1.95,
-        w: 9.5,
-        h: 0.18,
-        fontSize: 8,
-        color: COLORS.muted,
-        margin: 0,
-        fit: "shrink",
-      });
-      addFooter(slide, project, page);
-      page += 1;
       page = addGanttDetailSlides(pptx, project, ganttModel, page, locale);
     }
   }
 
-  page = addNarrativeSlide(pptx, project, page, t("report.nextSteps"), reportingPack?.nextSteps, t("report.executiveReport").toUpperCase());
-  page = addNarrativeSlide(pptx, project, page, t("report.managementAsk"), reportingPack?.managementAsk, t("report.executiveReport").toUpperCase());
-  addNarrativeSlide(pptx, project, page, t("report.conclusion"), reportingPack?.conclusion, t("report.executiveReport").toUpperCase());
+  page = addNarrativeSlide(pptx, project, page, t("report.nextSteps"), detailedNarrative("next-steps"), t("report.executiveReport").toUpperCase(), detailedNarrativeMode("next-steps"));
+  page = addNarrativeSlide(pptx, project, page, t("report.managementAsk"), detailedNarrative("management-ask"), t("report.executiveReport").toUpperCase(), detailedNarrativeMode("management-ask"));
+  addNarrativeSlide(pptx, project, page, t("report.conclusion"), detailedNarrative("conclusion"), t("report.executiveReport").toUpperCase(), detailedNarrativeMode("conclusion"));
 
   const output = await pptx.write({ outputType: "arraybuffer", compression: true });
   return Buffer.from(output as ArrayBuffer);
