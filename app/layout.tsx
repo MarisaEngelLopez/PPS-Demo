@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { getServerLocale } from "@/lib/i18n/server";
+import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,6 +19,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Project Operations System",
   description: "Project operations and executive reporting system",
+  applicationName: "PPS",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "PPS",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: "/pps-icon.svg",
+    apple: "/pps-icon.svg",
+  },
 };
 
 export const viewport: Viewport = {
@@ -39,6 +51,7 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col">
   <Providers initialLocale={locale}>
+    <ServiceWorkerRegistration />
     <MainNav />
     {children}
   </Providers>

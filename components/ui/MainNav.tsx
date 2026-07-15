@@ -65,30 +65,22 @@ function linkIsActive(pathname: string, href: string) {
 }
 
 function EnvironmentPill() {
-  const environment =
-    typeof process !== "undefined" && process.env.NODE_ENV
-      ? process.env.NODE_ENV
-      : "development";
+  const environment = process.env.NEXT_PUBLIC_APP_ENV || "DEV";
 
   return (
     <span
       style={{
-        background:
-          environment === "production"
-            ? "#dc2626"
-            : environment === "development"
-              ? "#f59e0b"
-              : "#64748b",
-        color: "white",
+        background: "#f8fafc",
+        border: "1px solid #cbd5e1",
+        color: "#475569",
         padding: "0.35rem 0.7rem",
         borderRadius: "999px",
         fontSize: "0.75rem",
         fontWeight: 700,
-        letterSpacing: "0.04em",
         whiteSpace: "nowrap",
       }}
     >
-      {environment?.toUpperCase()}
+      {environment}
     </span>
   );
 }

@@ -12,6 +12,31 @@ function isLocalHost(hostname: string) {
   );
 }
 
+function firstHeaderValue(value: string | null) {
+  return value?.split(",")[0]?.trim() ?? "";
+}
+
+function hostWithoutPort(host: string) {
+  if (!host) return "";
+  if (host.startsWith("[")) return host.slice(1, host.indexOf("]"));
+  return host.split(":")[0] ?? "";
+}
+
+function isForwardedRemoteRequest(request: NextRequest) {
+  const forwardedHost = hostWithoutPort(
+    firstHeaderValue(request.headers.get("x-forwarded-host"))
+  );
+
+  return Boolean(
+    (forwardedHost && !isLocalHost(forwardedHost)) ||
+      request.headers.get("cf-connecting-ip") ||
+      request.headers.get("cf-ray") ||
+      request.headers.get("cf-visitor") ||
+      request.headers.get("x-real-ip") ||
+      request.headers.get("x-forwarded-for")
+  );
+}
+
 function tokenMatches(candidate: string | null | undefined, expected: string) {
   return Boolean(candidate) && candidate === expected;
 }
@@ -63,7 +88,9 @@ export function proxy(request: NextRequest) {
   const url = request.nextUrl;
   const host = url.hostname;
 
-  if (isLocalHost(host)) return NextResponse.next();
+  if (isLocalHost(host) && !isForwardedRemoteRequest(request)) {
+    return NextResponse.next();
+  }
 
   if (!configuredToken) {
     return new Response("PPS access gate is not configured for remote access.", {
@@ -107,6 +134,6 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js|map)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js|map|webmanifest)$).*)",
   ],
 };
