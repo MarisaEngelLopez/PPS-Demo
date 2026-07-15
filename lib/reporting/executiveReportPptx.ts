@@ -89,14 +89,26 @@ async function getImageSource(logoUrl?: string | null): Promise<PptxImageSource 
   }
 
   if (logoUrl.startsWith("data:")) {
-    return { data: logoUrl };
+    return /^data:image\/(?:png|jpe?g|webp);base64,/i.test(logoUrl)
+      ? { data: logoUrl }
+      : null;
   }
 
-  if (/^https?:\/\//i.test(logoUrl)) {
+  if (/^https:\/\//i.test(logoUrl)) {
     try {
-      const response = await fetch(logoUrl);
+      const url = new URL(logoUrl);
+      const trustedHosts = (process.env.PPS_TRUSTED_LOGO_HOSTS ?? "")
+        .split(",")
+        .map((host) => host.trim().toLowerCase())
+        .filter(Boolean);
+      if (!trustedHosts.includes(url.hostname.toLowerCase())) return null;
+
+      const response = await fetch(url);
       if (!response.ok) return null;
-      const contentType = response.headers.get("content-type") ?? "image/png";
+      const contentType = (response.headers.get("content-type") ?? "")
+        .split(";")[0]
+        .trim();
+      if (!/^image\/(?:png|jpe?g|webp)$/i.test(contentType)) return null;
       const bytes = Buffer.from(await response.arrayBuffer());
       return { data: `data:${contentType};base64,${bytes.toString("base64")}` };
     } catch {
@@ -104,9 +116,27 @@ async function getImageSource(logoUrl?: string | null): Promise<PptxImageSource 
     }
   }
 
-  const candidate = logoUrl.startsWith("/")
-    ? path.join(process.cwd(), "public", logoUrl.slice(1))
-    : path.join(process.cwd(), "public", logoUrl);
+  if (/^http:\/\//i.test(logoUrl)) return null;
+
+  const publicRoot = path.resolve(process.cwd(), "public");
+  const logosRoot = path.resolve(publicRoot, "logos");
+  const relativeLogoPath = logoUrl
+    .replaceAll("\\", "/")
+    .replace(/^\/+/, "");
+  const normalizedLogoPath = path.posix.normalize(relativeLogoPath);
+
+  if (
+    normalizedLogoPath.startsWith("../") ||
+    normalizedLogoPath === ".." ||
+    !normalizedLogoPath.startsWith("logos/")
+  ) {
+    return null;
+  }
+
+  const candidate = path.resolve(publicRoot, normalizedLogoPath);
+  const staysInsideLogos =
+    candidate === logosRoot || candidate.startsWith(`${logosRoot}${path.sep}`);
+  if (!staysInsideLogos) return null;
 
   return fs.existsSync(candidate) ? { path: candidate } : null;
 }
