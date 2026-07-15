@@ -263,7 +263,7 @@ function BriefingCard({ title, children, wide = false }: { title: string; childr
   );
 }
 
-function BriefingCockpitBlock({
+function BriefingDeliveryCockpitBlock({
   title,
   metrics,
   locale,
@@ -272,12 +272,35 @@ function BriefingCockpitBlock({
   metrics: CockpitMetric[];
   locale: AppLocale;
 }) {
-  if (metrics.length === 0) return null;
+  const orderedMetrics = sortCockpitMetrics(
+    translateCockpitMetrics(metrics, (key) => translate(locale, key))
+  );
+  const lifecycleMetrics = orderedMetrics.filter(
+    (metric) => metric.group === "lifecycle"
+  );
+  const attentionMetrics = orderedMetrics.filter(
+    (metric) => metric.group === "attention"
+  );
+
+  if (orderedMetrics.length === 0) return null;
 
   return (
-    <div className="pdf-briefing-cockpit-block">
-      <div className="pdf-briefing-subtitle">{title}</div>
-      <PdfCockpitMetricGrid metrics={metrics} locale={locale} />
+    <div className="pdf-briefing-delivery-block">
+      <div className="pdf-briefing-delivery-title">{title}</div>
+      <div className="pdf-briefing-delivery-metric-row">
+        <div className="pdf-briefing-delivery-metrics pdf-briefing-delivery-lifecycle">
+          {lifecycleMetrics.map((metric) => (
+            <MetricCard key={metric.key} metric={metric} />
+          ))}
+        </div>
+        {attentionMetrics.length > 0 && (
+          <div className="pdf-briefing-delivery-metrics pdf-briefing-delivery-attention">
+            {attentionMetrics.map((metric) => (
+              <MetricCard key={metric.key} metric={metric} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -602,11 +625,11 @@ export default async function ExecutiveReportExportPage({
         <BriefingCard title={t("report.executiveSummary")}><NarrativeBlock text={briefing.narratives.executiveSummary} mode="CHECKPOINTS" /></BriefingCard>
         <BriefingCard title={locale === "es" ? "Estado de entrega" : "Delivery Status"}>
           <div className="pdf-briefing-delivery">
-            <BriefingCockpitBlock title={locale === "es" ? "Actividades" : "Workstreams"} metrics={workstreamCockpitMetrics} locale={locale} />
-            <BriefingCockpitBlock title={locale === "es" ? "Hitos" : "Milestones"} metrics={milestoneCockpitMetrics} locale={locale} />
+            <BriefingDeliveryCockpitBlock title={locale === "es" ? "Actividades" : "Workstreams"} metrics={workstreamCockpitMetrics} locale={locale} />
+            <BriefingDeliveryCockpitBlock title={locale === "es" ? "Hitos" : "Milestones"} metrics={milestoneCockpitMetrics} locale={locale} />
           </div>
         </BriefingCard>
-        <BriefingCard title={locale === "es" ? "Pulso del proyecto" : "Project Pulse"}><div className="pdf-briefing-pulse">{briefing.pulse.map((item) => <div key={item.key}><span>{item.label}</span><strong>{item.value}</strong></div>)}</div></BriefingCard>
+        <BriefingCard title={locale === "es" ? "Pulso del proyecto" : "Project Pulse"}><div className="pdf-briefing-pulse">{briefing.pulse.map((item) => <div className="pdf-briefing-pulse-card" key={item.key}><span>{item.label}</span><strong>{item.value}</strong></div>)}</div></BriefingCard>
         <BriefingCard title={t("report.progressSinceLastReport")}><NarrativeBlock text={briefing.narratives.progressSinceLastReport} mode="BULLETS" /></BriefingCard>
         <BriefingCard title={locale === "es" ? "Riesgos" : "Risks"}><PdfCockpitMetricGrid metrics={riskCockpitMetrics} locale={locale} /></BriefingCard>
         <BriefingCard title={locale === "es" ? "Decisiones" : "Decisions"}><PdfCockpitMetricGrid metrics={decisionCockpitMetrics} locale={locale} /></BriefingCard>
@@ -851,8 +874,12 @@ export default async function ExecutiveReportExportPage({
           font-weight: 400;
         }
 
+        .pdf-narrative-children li {
+          gap: 0.25rem;
+          grid-template-columns: 0.55rem 1fr;
+        }
+
         .pdf-narrative-checkpoints .pdf-narrative {
-          background: #ffffff;
           border: 0;
           font-size: 1.05rem;
           font-weight: 600;
@@ -1050,12 +1077,12 @@ export default async function ExecutiveReportExportPage({
         .pdf-briefing-timeline th:nth-child(2), .pdf-briefing-timeline td:nth-child(2) { width: 14%; }
         .pdf-briefing-timeline th:nth-child(3), .pdf-briefing-timeline td:nth-child(3) { width: 9%; }
         .pdf-briefing-timeline th:nth-child(4), .pdf-briefing-timeline td:nth-child(4) { width: 55%; }
-        .pdf-briefing-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: 27mm 27mm 24mm; gap: 3px; }
+        .pdf-briefing-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: 31mm 27mm 24mm; gap: 3px; }
         .pdf-briefing-card { border: 1px solid #cbd5e1; padding: 4px 5px; min-height: 0; overflow: hidden; }
         .pdf-briefing-card-wide { grid-column: span 2; min-height: 0; }
         .pdf-briefing-card-title { color: #0f172a; font-size: 9px; line-height: 1.1; font-weight: 800; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px; margin-bottom: 3px; }
         .pdf-briefing-card .pdf-narrative-wrap { align-items: flex-start; margin: 0; min-height: 0; }
-        .pdf-briefing-card .pdf-narrative { gap: 2px; font-size: 7px; line-height: 1.15; }
+        .pdf-briefing-card .pdf-narrative { background: #ffffff; border: 0; border-radius: 0; gap: 2px; font-size: 7px; line-height: 1.15; padding: 0; }
         .pdf-briefing-card .pdf-narrative-item { grid-template-columns: 9px 1fr; gap: 1px; }
         .pdf-briefing-card .pdf-cockpit-grid { display: block; margin: 0; }
         .pdf-briefing-card .pdf-metric-group-label { display: none; }
@@ -1064,23 +1091,20 @@ export default async function ExecutiveReportExportPage({
         .pdf-briefing-card .pdf-metric-card { min-height: 4.2mm; padding: 1px 2px; }
         .pdf-briefing-card .pdf-metric-label { font-size: 5.3px; line-height: 1; }
         .pdf-briefing-card .pdf-metric-value { font-size: 6.4px; line-height: 1; }
-        .pdf-briefing-cockpit-block { display: grid; gap: 2px; }
-        .pdf-briefing-cockpit-block + .pdf-briefing-cockpit-block { margin-top: 3px; }
-        .pdf-briefing-subtitle { color: #334155; font-size: 6px; font-weight: 800; letter-spacing: .04em; line-height: 1; text-transform: uppercase; }
         .pdf-briefing-delivery { display: grid; gap: 2px; }
-        .pdf-briefing-delivery .pdf-briefing-cockpit-block + .pdf-briefing-cockpit-block { margin-top: 0; }
-        .pdf-briefing-delivery .pdf-briefing-subtitle { font-size: 5.2px; }
-        .pdf-briefing-delivery .pdf-cockpit-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, .8fr); column-gap: 3px; }
-        .pdf-briefing-delivery .pdf-metric-group-label { display: block; color: #64748b; font-size: 4.9px; font-weight: 800; letter-spacing: .04em; line-height: 1; margin-bottom: 1px; text-transform: uppercase; }
-        .pdf-briefing-delivery .pdf-metric-group + .pdf-metric-group { margin-top: 1px; }
-        .pdf-briefing-delivery .pdf-metric-group + .pdf-metric-group { margin-top: 0; }
-        .pdf-briefing-delivery .pdf-metric-grid { gap: 1px; grid-template-columns: repeat(2, 1fr); }
-        .pdf-briefing-delivery .pdf-metric-group:nth-child(2) .pdf-metric-grid { grid-template-columns: 1fr; }
-        .pdf-briefing-delivery .pdf-metric-card { min-height: 2.7mm; padding: 1px; }
+        .pdf-briefing-delivery-block { display: grid; gap: 1px; }
+        .pdf-briefing-delivery-title { color: #334155; font-size: 4.9px; font-weight: 800; letter-spacing: .04em; line-height: 1; text-transform: uppercase; }
+        .pdf-briefing-delivery-metric-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); column-gap: 7px; }
+        .pdf-briefing-delivery-metrics { align-self: start; display: grid; gap: 1px; }
+        .pdf-briefing-delivery-lifecycle { grid-template-columns: repeat(2, 1fr); }
+        .pdf-briefing-delivery-attention { grid-template-columns: 1fr; }
+        .pdf-briefing-delivery .pdf-metric-card { min-height: 2.9mm; padding: 1px; }
         .pdf-briefing-delivery .pdf-metric-label { font-size: 4.2px; }
         .pdf-briefing-delivery .pdf-metric-value { font-size: 5.5px; }
         .pdf-briefing-pulse { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; font-size: 7px; }
-        .pdf-briefing-pulse > div { display: flex; justify-content: space-between; gap: 3px; border-bottom: 1px solid #e2e8f0; padding: 2px; }
+        .pdf-briefing-pulse-card { align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; display: flex; justify-content: space-between; min-height: 8mm; padding: 2px 4px; }
+        .pdf-briefing-pulse-card span { color: #475569; font-weight: 700; line-height: 1.1; }
+        .pdf-briefing-pulse-card strong { color: #0f172a; font-size: 11px; line-height: 1; }
         .pdf-briefing-priority { display: grid; gap: 3px; font-size: 7px; line-height: 1.2; }
         .pdf-briefing-priority span { color: #475569; }
         .pdf-combined-cockpit-section { border-top: 1px solid #cbd5e1; margin-top: 1.2rem; padding-top: .5rem; }
