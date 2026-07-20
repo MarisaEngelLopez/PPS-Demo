@@ -6,6 +6,10 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export default async function LoginPage() {
+  if (process.env.NEXT_PUBLIC_APP_ENV === "DEMO_PACKAGE") {
+    redirect("/demo");
+  }
+
   const session = await auth.api.getSession({
     headers: await headers(),
   });

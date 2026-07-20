@@ -6,6 +6,7 @@ import { DemoLoginForm } from "@/app/demo/DemoLoginForm";
 import { auth } from "@/lib/auth";
 
 export default async function DemoPage() {
+  const isDemoPackage = process.env.NEXT_PUBLIC_APP_ENV === "DEMO_PACKAGE";
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -68,25 +69,27 @@ export default async function DemoPage() {
 
         <DemoLoginForm />
 
-        <div
-          style={{
-            borderTop: "1px solid #e2e8f0",
-            paddingTop: "0.85rem",
-            textAlign: "center",
-          }}
-        >
-          <Link
-            href="/login"
+        {!isDemoPackage ? (
+          <div
             style={{
-              color: "#475569",
-              fontSize: "0.86rem",
-              fontWeight: 700,
-              textDecoration: "none",
+              borderTop: "1px solid #e2e8f0",
+              paddingTop: "0.85rem",
+              textAlign: "center",
             }}
           >
-            Owner sign in
-          </Link>
-        </div>
+            <Link
+              href="/login"
+              style={{
+                color: "#475569",
+                fontSize: "0.86rem",
+                fontWeight: 700,
+                textDecoration: "none",
+              }}
+            >
+              Owner sign in
+            </Link>
+          </div>
+        ) : null}
       </section>
     </main>
   );
