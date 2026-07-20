@@ -12,6 +12,7 @@ import {
   speakVoiceConfirmationSegments,
   type VoiceConfirmationSegment,
 } from "@/components/agents/voiceConfirmation";
+import { runAgentActionAndSwitchTab } from "@/components/agents/runAgentActionAndSwitchTab";
 import {
   compactInputStyle,
   inputStyle,
@@ -461,6 +462,21 @@ export function TimeTrackingAssistant({
     previousWorkSessionCount.current = workSessions.length;
   }, [workSessions.length]);
 
+  async function createSuggestionAndReview(
+    action: AssistantAction,
+    formData: FormData,
+    afterAction?: () => void
+  ) {
+    await runAgentActionAndSwitchTab({
+      handleAction,
+      action,
+      formData,
+      setActiveTab,
+      tab: "SUGGESTIONS",
+      afterAction,
+    });
+  }
+
   function clearNaturalLanguageState() {
     setInterpretation(null);
     setInterpretationMessage("");
@@ -522,8 +538,12 @@ export function TimeTrackingAssistant({
       if (pending.intent === "UPDATE_WORK_SESSION_NOTES") {
         formData.set("notes", pending.notes ?? "");
       }
-      await handleAction(action, formData);
-      clearNaturalLanguageState();
+      if (pending.intent === "FINISH_WORK_SESSION") {
+        await createSuggestionAndReview(action, formData, clearNaturalLanguageState);
+      } else {
+        await handleAction(action, formData);
+        clearNaturalLanguageState();
+      }
       return true;
     }
 
@@ -871,8 +891,12 @@ export function TimeTrackingAssistant({
                           : interpretation.intent === "FINISH_WORK_SESSION"
                             ? finishWorkSession
                             : updateWorkSessionNotes;
-                    await handleAction(action, formData);
-                    clearNaturalLanguageState();
+                    if (interpretation.intent === "FINISH_WORK_SESSION") {
+                      await createSuggestionAndReview(action, formData, clearNaturalLanguageState);
+                    } else {
+                      await handleAction(action, formData);
+                      clearNaturalLanguageState();
+                    }
                   }}
                 >
                   <input type="hidden" name="id" value={interpretation.workSessionId} />
@@ -1060,8 +1084,12 @@ export function TimeTrackingAssistant({
                       : interpretation.intent === "FINISH_WORK_SESSION"
                         ? finishWorkSession
                         : updateWorkSessionNotes;
-                await handleAction(action, formData);
-                clearNaturalLanguageState();
+                if (interpretation.intent === "FINISH_WORK_SESSION") {
+                  await createSuggestionAndReview(action, formData, clearNaturalLanguageState);
+                } else {
+                  await handleAction(action, formData);
+                  clearNaturalLanguageState();
+                }
               }}
             >
               <input type="hidden" name="id" value={interpretation.workSessionId} />
@@ -1285,7 +1313,7 @@ export function TimeTrackingAssistant({
                       <form
                         action={async (formData) => {
                           formData.set("clientTimestamp", getClientTimestamp());
-                          await handleAction(finishWorkSession, formData);
+                          await createSuggestionAndReview(finishWorkSession, formData);
                         }}
                       >
                         <input type="hidden" name="id" value={session.id} />

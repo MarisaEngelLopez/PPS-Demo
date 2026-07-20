@@ -14,16 +14,22 @@ import {
   validateDecisionInput,
 } from "@/lib/domain/decisions/decisionValidation";
 import { revalidatePath } from "next/cache";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 export async function createDecision(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const input = parseDecisionInput(formData);
     const inputError = validateDecisionInput(input);
     if (inputError) return inputError;
 
     await prisma.$transaction(async (tx) => {
       const project = await tx.project.findFirst({
-        where: { id: input.projectId, isActive: true },
+        where: {
+          id: input.projectId,
+          isActive: true,
+          workspaceId: selectedWorkspace.id,
+        },
         select: { id: true },
       });
 
@@ -37,6 +43,7 @@ export async function createDecision(formData: FormData) {
             id: input.projectWorkstreamId,
             projectId: input.projectId,
             isActive: true,
+            project: { workspaceId: selectedWorkspace.id },
           },
           select: { id: true },
         });
@@ -91,6 +98,7 @@ export async function createDecision(formData: FormData) {
 
 export async function updateDecision(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const id = String(formData.get("id") || "");
 
     if (!id) {
@@ -103,7 +111,11 @@ export async function updateDecision(formData: FormData) {
 
     await prisma.$transaction(async (tx) => {
       const project = await tx.project.findFirst({
-        where: { id: input.projectId, isActive: true },
+        where: {
+          id: input.projectId,
+          isActive: true,
+          workspaceId: selectedWorkspace.id,
+        },
         select: { id: true },
       });
 
@@ -117,6 +129,7 @@ export async function updateDecision(formData: FormData) {
             id: input.projectWorkstreamId,
             projectId: input.projectId,
             isActive: true,
+            project: { workspaceId: selectedWorkspace.id },
           },
           select: { id: true },
         });
@@ -130,6 +143,15 @@ export async function updateDecision(formData: FormData) {
 
       if (!status) {
         throw new Error("Configure at least one active decision status.");
+      }
+
+      const existingDecision = await tx.projectDecision.findFirst({
+        where: { id, project: { workspaceId: selectedWorkspace.id } },
+        select: { id: true },
+      });
+
+      if (!existingDecision) {
+        throw new Error("Decision not found in the selected workspace.");
       }
 
       await tx.projectDecision.update({
@@ -169,12 +191,21 @@ export async function updateDecision(formData: FormData) {
 
 export async function archiveDecision(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const id = String(formData.get("id") || "");
 
     await prisma.$transaction(async (tx) => {
       const closedStatus = await getClosedDecisionStatus(tx);
       if (!closedStatus) {
         throw new Error("Configure an active closed decision status.");
+      }
+
+      const decision = await tx.projectDecision.findFirst({
+        where: { id, project: { workspaceId: selectedWorkspace.id } },
+        select: { id: true },
+      });
+      if (!decision) {
+        throw new Error("Decision not found in the selected workspace.");
       }
 
       await tx.projectDecision.update({
@@ -200,6 +231,7 @@ export async function archiveDecision(formData: FormData) {
 
 export async function deleteDecision(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const id = String(formData.get("id") || "");
 
     if (!id) {
@@ -207,8 +239,8 @@ export async function deleteDecision(formData: FormData) {
     }
 
     await prisma.$transaction(async (tx) => {
-      const decision = await tx.projectDecision.findUnique({
-        where: { id },
+      const decision = await tx.projectDecision.findFirst({
+        where: { id, project: { workspaceId: selectedWorkspace.id } },
         include: { statusRef: true },
       });
 

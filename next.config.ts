@@ -9,14 +9,27 @@ const remoteOrigins = [
   ...(permanentTunnelHost ? [permanentTunnelHost] : []),
   ...(extraAllowedOrigins ?? []),
 ];
+const allowedDevOrigins = [
+  ...new Set(
+    remoteOrigins.flatMap((origin) => {
+      const host = origin
+        .replace(/^https?:\/\//, "")
+        .split("/")[0]
+        .split(":")[0];
+      return host ? [origin, host] : [origin];
+    })
+  ),
+];
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: remoteOrigins,
+  allowedDevOrigins,
   experimental: {
     serverActions: {
       allowedOrigins: [
         "localhost:3000",
         "127.0.0.1:3000",
+        "localhost:3001",
+        "127.0.0.1:3001",
         ...remoteOrigins,
       ],
     },

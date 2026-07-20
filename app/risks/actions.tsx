@@ -27,6 +27,7 @@ import {
   validateRiskInput,
 } from "@/lib/domain/risks/riskValidation";
 import { revalidatePath } from "next/cache";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 type RiskTransaction = Prisma.TransactionClient;
 
@@ -147,13 +148,18 @@ async function getRiskClosureBlockersForRisk(
 
 export async function createProjectRisk(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const input = parseRiskInput(formData);
     const inputError = validateRiskInput(input);
     if (inputError) return inputError;
 
     await prisma.$transaction(async (tx) => {
       const project = await tx.project.findFirst({
-        where: { id: input.projectId, isActive: true },
+        where: {
+          id: input.projectId,
+          isActive: true,
+          workspaceId: selectedWorkspace.id,
+        },
         select: { id: true },
       });
 
@@ -165,6 +171,7 @@ export async function createProjectRisk(formData: FormData) {
             id: input.projectWorkstreamId,
             projectId: input.projectId,
             isActive: true,
+            project: { workspaceId: selectedWorkspace.id },
           },
           select: { id: true },
         });
@@ -225,6 +232,7 @@ export async function createProjectRisk(formData: FormData) {
 
 export async function updateProjectRisk(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const id = String(formData.get("id") || "");
     if (!id) return riskError("Risk not updated: missing id.");
 
@@ -234,7 +242,11 @@ export async function updateProjectRisk(formData: FormData) {
 
     await prisma.$transaction(async (tx) => {
       const project = await tx.project.findFirst({
-        where: { id: input.projectId, isActive: true },
+        where: {
+          id: input.projectId,
+          isActive: true,
+          workspaceId: selectedWorkspace.id,
+        },
         select: { id: true },
       });
 
@@ -246,6 +258,7 @@ export async function updateProjectRisk(formData: FormData) {
             id: input.projectWorkstreamId,
             projectId: input.projectId,
             isActive: true,
+            project: { workspaceId: selectedWorkspace.id },
           },
           select: { id: true },
         });
@@ -265,6 +278,14 @@ export async function updateProjectRisk(formData: FormData) {
       const status = await resolveStatusByIdForScope(tx, "RISK", input.statusId);
 
       if (!status) throw new Error("Select an active risk status.");
+
+      const existingRisk = await tx.projectRisk.findFirst({
+        where: { id, project: { workspaceId: selectedWorkspace.id } },
+        select: { id: true },
+      });
+      if (!existingRisk) {
+        throw new Error("Risk not found in the selected workspace.");
+      }
 
       const closedRiskStatusIds = await getClosedStatusIdsForScope(tx, "RISK");
       if (closedRiskStatusIds.has(status.id)) {
@@ -314,8 +335,9 @@ export async function deleteProjectRisk(formData: FormData) {
 
   if (!id) return riskError("Risk not deleted: missing id.");
 
-  const risk = await prisma.projectRisk.findUnique({
-    where: { id },
+  const selectedWorkspace = await getSelectedWorkspace();
+  const risk = await prisma.projectRisk.findFirst({
+    where: { id, project: { workspaceId: selectedWorkspace.id } },
     include: {
       status: true,
       riskActions: { select: { id: true } },
@@ -348,13 +370,18 @@ export async function deleteProjectRisk(formData: FormData) {
 
 export async function createProjectRiskAction(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const input = parseRiskActionInput(formData);
     const inputError = validateRiskActionInput(input);
     if (inputError) return inputError;
 
     await prisma.$transaction(async (tx) => {
       const risk = await tx.projectRisk.findFirst({
-        where: { id: input.projectRiskId, isActive: true },
+        where: {
+          id: input.projectRiskId,
+          isActive: true,
+          project: { workspaceId: selectedWorkspace.id },
+        },
         select: { id: true },
       });
 
@@ -397,6 +424,7 @@ export async function createProjectRiskAction(formData: FormData) {
 
 export async function updateProjectRiskAction(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const id = String(formData.get("id") || "");
     if (!id) return riskError("Risk action not updated: missing id.");
 
@@ -416,6 +444,17 @@ export async function updateProjectRiskAction(formData: FormData) {
       );
 
       if (!status) throw new Error("Configure at least one active risk action status.");
+
+      const existingAction = await tx.projectRiskAction.findFirst({
+        where: {
+          id,
+          projectRisk: { project: { workspaceId: selectedWorkspace.id } },
+        },
+        select: { id: true },
+      });
+      if (!existingAction) {
+        throw new Error("Risk action not found in the selected workspace.");
+      }
 
       await tx.projectRiskAction.update({
         where: { id },
@@ -446,8 +485,12 @@ export async function deleteProjectRiskAction(formData: FormData) {
 
   if (!id) return;
 
-  const action = await prisma.projectRiskAction.findUnique({
-    where: { id },
+  const selectedWorkspace = await getSelectedWorkspace();
+  const action = await prisma.projectRiskAction.findFirst({
+    where: {
+      id,
+      projectRisk: { project: { workspaceId: selectedWorkspace.id } },
+    },
     include: { statusRef: true },
   });
 
@@ -464,13 +507,17 @@ export async function deleteProjectRiskAction(formData: FormData) {
 
 export async function createRiskActionEvidence(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const input = parseRiskActionEvidenceInput(formData);
     const inputError = validateRiskActionEvidenceInput(input);
     if (inputError) return inputError;
 
     await prisma.$transaction(async (tx) => {
-      const riskAction = await tx.projectRiskAction.findUnique({
-        where: { id: input.riskActionId },
+      const riskAction = await tx.projectRiskAction.findFirst({
+        where: {
+          id: input.riskActionId,
+          projectRisk: { project: { workspaceId: selectedWorkspace.id } },
+        },
         select: { id: true },
       });
 
@@ -510,6 +557,7 @@ export async function createRiskActionEvidence(formData: FormData) {
 
 export async function updateRiskActionEvidence(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const id = String(formData.get("id") || "");
     if (!id) return riskError("Evidence not updated: missing id.");
 
@@ -518,8 +566,13 @@ export async function updateRiskActionEvidence(formData: FormData) {
     if (inputError) return inputError;
 
     await prisma.$transaction(async (tx) => {
-      const evidenceRecord = await tx.riskActionEvidence.findUnique({
-        where: { id },
+      const evidenceRecord = await tx.riskActionEvidence.findFirst({
+        where: {
+          id,
+          riskAction: {
+            projectRisk: { project: { workspaceId: selectedWorkspace.id } },
+          },
+        },
         select: { id: true },
       });
 
@@ -559,8 +612,22 @@ export async function updateRiskActionEvidence(formData: FormData) {
 
 export async function deleteRiskActionEvidence(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const id = String(formData.get("id") || "");
     if (!id) return riskError("Evidence not deleted: missing id.");
+
+    const existing = await prisma.riskActionEvidence.findFirst({
+      where: {
+        id,
+        riskAction: {
+          projectRisk: { project: { workspaceId: selectedWorkspace.id } },
+        },
+      },
+      select: { id: true },
+    });
+    if (!existing) {
+      return riskError("Evidence not deleted: record is not in the selected workspace.");
+    }
 
     await prisma.riskActionEvidence.delete({ where: { id } });
 
@@ -577,13 +644,18 @@ export async function deleteRiskActionEvidence(formData: FormData) {
 
 export async function createRiskAssessment(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const input = parseRiskAssessmentInput(formData);
     const inputError = validateRiskAssessmentInput(input);
     if (inputError) return inputError;
 
     await prisma.$transaction(async (tx) => {
       const risk = await tx.projectRisk.findFirst({
-        where: { id: input.riskId, isActive: true },
+        where: {
+          id: input.riskId,
+          isActive: true,
+          project: { workspaceId: selectedWorkspace.id },
+        },
         select: { id: true },
       });
 
@@ -625,6 +697,7 @@ export async function createRiskAssessment(formData: FormData) {
 
 export async function updateRiskAssessment(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const id = String(formData.get("id") || "");
     if (!id) return riskError("Assessment not updated: missing id.");
 
@@ -633,8 +706,11 @@ export async function updateRiskAssessment(formData: FormData) {
     if (inputError) return inputError;
 
     await prisma.$transaction(async (tx) => {
-      const assessment = await tx.riskAssessment.findUnique({
-        where: { id },
+      const assessment = await tx.riskAssessment.findFirst({
+        where: {
+          id,
+          risk: { project: { workspaceId: selectedWorkspace.id } },
+        },
         select: { id: true },
       });
 
@@ -676,8 +752,17 @@ export async function updateRiskAssessment(formData: FormData) {
 
 export async function deleteRiskAssessment(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const id = String(formData.get("id") || "");
     if (!id) return riskError("Assessment not deleted: missing id.");
+
+    const existing = await prisma.riskAssessment.findFirst({
+      where: { id, risk: { project: { workspaceId: selectedWorkspace.id } } },
+      select: { id: true },
+    });
+    if (!existing) {
+      return riskError("Assessment not deleted: record is not in the selected workspace.");
+    }
 
     await prisma.riskAssessment.delete({ where: { id } });
 
@@ -694,13 +779,18 @@ export async function deleteRiskAssessment(formData: FormData) {
 
 export async function createRiskReview(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const input = parseRiskReviewInput(formData);
     const inputError = validateRiskReviewInput(input);
     if (inputError) return inputError;
 
     await prisma.$transaction(async (tx) => {
       const risk = await tx.projectRisk.findFirst({
-        where: { id: input.riskId, isActive: true },
+        where: {
+          id: input.riskId,
+          isActive: true,
+          project: { workspaceId: selectedWorkspace.id },
+        },
         select: { id: true, projectId: true },
       });
 
@@ -793,6 +883,7 @@ export async function createRiskReview(formData: FormData) {
 
 export async function updateRiskReview(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const id = String(formData.get("id") || "");
     if (!id) return riskError("Review not updated: missing id.");
 
@@ -801,8 +892,8 @@ export async function updateRiskReview(formData: FormData) {
     if (inputError) return inputError;
 
     await prisma.$transaction(async (tx) => {
-      const existing = await tx.riskReview.findUnique({
-        where: { id },
+      const existing = await tx.riskReview.findFirst({
+        where: { id, risk: { project: { workspaceId: selectedWorkspace.id } } },
         include: { risk: { select: { id: true, projectId: true } } },
       });
 
@@ -896,8 +987,17 @@ export async function updateRiskReview(formData: FormData) {
 
 export async function deleteRiskReview(formData: FormData) {
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
     const id = String(formData.get("id") || "");
     if (!id) return riskError("Review not deleted: missing id.");
+
+    const existing = await prisma.riskReview.findFirst({
+      where: { id, risk: { project: { workspaceId: selectedWorkspace.id } } },
+      select: { id: true },
+    });
+    if (!existing) {
+      return riskError("Review not deleted: record is not in the selected workspace.");
+    }
 
     await prisma.riskReview.delete({ where: { id } });
 

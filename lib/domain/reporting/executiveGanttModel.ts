@@ -478,21 +478,24 @@ export function buildExecutiveGanttModel({
 }): ExecutiveGanttModel | null {
   const normalizedToday = startOfDay(today);
   const activeWorkstreams = projectWorkstreams.filter(isActiveWorkstream);
-  const activeWorkstreamIds = new Set(
-    activeWorkstreams.map((workstream) => workstream.id)
+  const visibleWorkstreams = activeWorkstreams.filter((workstream) =>
+    isVisibleInTimeline(workstream, mode)
+  );
+  const visibleWorkstreamIds = new Set(
+    visibleWorkstreams.map((workstream) => workstream.id)
   );
   const visibleEvents = projectEvents.filter(
     (event) =>
       isActiveEvent(event) &&
       isVisibleInTimeline(event, mode) &&
       (!event.linkedProjectWorkstreamId ||
-        activeWorkstreamIds.has(event.linkedProjectWorkstreamId))
+        visibleWorkstreamIds.has(event.linkedProjectWorkstreamId))
   );
-  const bounds = getBounds(activeWorkstreams, visibleEvents, normalizedToday);
+  const bounds = getBounds(visibleWorkstreams, visibleEvents, normalizedToday);
 
   if (!bounds) return null;
 
-  const groupedWorkstreams = getGroupedWorkstreams(activeWorkstreams);
+  const groupedWorkstreams = getGroupedWorkstreams(visibleWorkstreams);
   const rows: ExecutiveGanttRow[] = [];
   const unlinkedEvents = visibleEvents.filter(
     (event) => !event.linkedProjectWorkstreamId
@@ -516,9 +519,7 @@ export function buildExecutiveGanttModel({
       getPhaseSummary(phaseName, workstreams, normalizedToday, bounds.min, bounds.max)
     );
 
-    workstreams
-      .filter((workstream) => isVisibleInTimeline(workstream, mode))
-      .forEach((workstream) => {
+    workstreams.forEach((workstream) => {
         rows.push({
           id: `workstream-${workstream.id}`,
           kind: "workstream",

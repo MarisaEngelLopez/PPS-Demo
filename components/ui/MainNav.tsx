@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AuthStatus } from "@/components/auth/AuthStatus";
+import { getEnvironmentDisplay } from "@/components/ui/environmentStyles";
 import { useTranslation } from "@/components/i18n/TranslationProvider";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
 import {
@@ -26,6 +28,9 @@ const navItems: NavLink[] = [
   { href: "/risks", labelKey: "nav.risks" },
   { href: "/decisions", labelKey: "nav.decisions" },
   { href: "/executive-report", labelKey: "nav.executiveReport" },
+];
+
+const ownerNavItems: NavLink[] = [
   { href: "/admin", labelKey: "nav.admin" },
   { href: "/configuration", labelKey: "nav.configuration" },
 ];
@@ -65,22 +70,21 @@ function linkIsActive(pathname: string, href: string) {
 }
 
 function EnvironmentPill() {
-  const environment = process.env.NEXT_PUBLIC_APP_ENV || "DEV";
+  const environment = getEnvironmentDisplay();
 
   return (
     <span
       style={{
-        background: "#f8fafc",
-        border: "1px solid #cbd5e1",
-        color: "#475569",
         padding: "0.35rem 0.7rem",
         borderRadius: "999px",
         fontSize: "0.75rem",
         fontWeight: 700,
         whiteSpace: "nowrap",
+        ...environment.style,
       }}
+      title={environment.title}
     >
-      {environment}
+      {environment.label}
     </span>
   );
 }
@@ -124,14 +128,24 @@ function LanguageMenuControl({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export default function MainNav() {
+export default function MainNav({
+  showOwnerNavigation = false,
+  showEnvironmentPill = true,
+}: {
+  showOwnerNavigation?: boolean;
+  showEnvironmentPill?: boolean;
+}) {
   const pathname = usePathname();
   const { t } = useTranslation();
+  if (pathname === "/demo") return null;
+  const desktopNavItems = showOwnerNavigation
+    ? [...navItems, ...ownerNavItems]
+    : navItems;
 
   return (
     <>
       <nav className="desktop-main-nav" style={navStyle}>
-        {navItems.map((item) => {
+        {desktopNavItems.map((item) => {
           const active = linkIsActive(pathname, item.href);
 
           return (
@@ -156,8 +170,9 @@ export default function MainNav() {
             gap: "0.6rem",
           }}
         >
+          <AuthStatus />
           <LanguageMenuControl />
-          <EnvironmentPill />
+          {showEnvironmentPill && <EnvironmentPill />}
         </div>
       </nav>
       <nav className="mobile-operational-nav" style={navStyle}>

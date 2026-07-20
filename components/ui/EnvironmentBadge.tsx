@@ -1,7 +1,7 @@
+import { getEnvironmentDisplay } from "@/components/ui/environmentStyles";
+
 export function EnvironmentBadge() {
-  const appEnv = process.env.NEXT_PUBLIC_APP_ENV || "DEV";
-  const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "local";
-  const gitBranch = process.env.NEXT_PUBLIC_GIT_BRANCH || "unknown";
+  const environment = getEnvironmentDisplay();
 
   return (
     <div
@@ -10,14 +10,12 @@ export function EnvironmentBadge() {
         fontWeight: 700,
         padding: "0.25rem 0.5rem",
         borderRadius: "999px",
-        background: "#f8fafc",
-        color: "#475569",
-        border: "1px solid #cbd5e1",
         whiteSpace: "nowrap",
+        ...environment.style,
       }}
-      title={`${appEnv} · ${gitBranch} · ${appVersion}`}
+      title={environment.title}
     >
-      {appEnv} · {gitBranch} · {appVersion}
+      {environment.label} · {environment.gitBranch} · {environment.appVersion}
     </div>
   );
 }

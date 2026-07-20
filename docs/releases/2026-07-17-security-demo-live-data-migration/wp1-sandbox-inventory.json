@@ -1,0 +1,1068 @@
+{
+  "reportType": "V3_3_SECURITY_WP1_INVENTORY",
+  "generatedAt": "2026-07-18T08:16:48.043Z",
+  "database": {
+    "configuredUrl": "file:./data/dev-sandbox.db",
+    "resolvedPath": "C:\\Users\\maris\\Documents\\Project Management system 2\\project-ops-system\\data\\dev-sandbox.db",
+    "classification": "SANDBOX_DEV",
+    "bytes": 2748416,
+    "sha256": "23664e484a69d253a3546d09fb0491353c93b06db7e4176454484bf74e02c4dc",
+    "modifiedAt": "2026-07-17T11:08:38.417Z"
+  },
+  "checks": {
+    "integrityCheck": [
+      "ok"
+    ],
+    "foreignKeyCheck": [],
+    "orphanCheckFailureCount": 0
+  },
+  "prisma": {
+    "migrationCount": 43,
+    "migrations": [
+      {
+        "migration_name": "20260429182306_init_simple",
+        "started_at": 1777486986669,
+        "finished_at": 1777486986710,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260501091333_add_task_families",
+        "started_at": 1777626813130,
+        "finished_at": 1777626813145,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260501171916_add_phases_workstreams",
+        "started_at": 1777655956642,
+        "finished_at": 1777655956677,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260502135424_make_project_type_optional",
+        "started_at": 1777730064151,
+        "finished_at": 1777730064214,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260503113213_add_project_workstream_active",
+        "started_at": 1777807933012,
+        "finished_at": 1777807933036,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260503182432_remove_project_type_from_project_workstream",
+        "started_at": 1777832672231,
+        "finished_at": 1777832672305,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260504090039_add_planned_actual_dates",
+        "started_at": 1777885239243,
+        "finished_at": 1777885239272,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260504091801_add_planned_actual_dates_to_project_workstreams",
+        "started_at": 1777886281385,
+        "finished_at": 1777886281410,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260504173049_add_project_templates",
+        "started_at": 1777915849682,
+        "finished_at": 1777915849705,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260505061133_add_template_workstream_dates",
+        "started_at": 1777961493038,
+        "finished_at": 1777961493050,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260506104017_add_project_events",
+        "started_at": 1778064017243,
+        "finished_at": 1778064017254,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260506112625_add_event_types",
+        "started_at": 1778224509977,
+        "finished_at": 1778224510007,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260511073642_extend_project_workstream_v2",
+        "started_at": 1778485002837,
+        "finished_at": 1778485002858,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260511110905_extend_project_event_v2",
+        "started_at": 1778497745852,
+        "finished_at": 1778497745875,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260511162320_add_project_event_workstream_link",
+        "started_at": 1778516600596,
+        "finished_at": 1778516600622,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260512061500_add_project_tasks",
+        "started_at": 1778566500653,
+        "finished_at": 1778566500666,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260512073129_add_project_task_sort_order",
+        "started_at": 1778571089755,
+        "finished_at": 1778571089779,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260512120720_add_project_task_hierarchy",
+        "started_at": 1778587640332,
+        "finished_at": 1778587640370,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260512143334_add_project_task_to_time_entries",
+        "started_at": 1778596414504,
+        "finished_at": 1778596414544,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260512164014_add_project_risk_register",
+        "started_at": 1778604014764,
+        "finished_at": 1778604014811,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260513144230_add_risk_actions",
+        "started_at": 1778683350406,
+        "finished_at": 1778683350425,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260519164344_add_organization_branding_context",
+        "started_at": 1779209024738,
+        "finished_at": 1779209024822,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260520100119_add_reporting_pack_workspace_fields",
+        "started_at": 1779271279525,
+        "finished_at": 1779271279547,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260520115304_add_project_decision_register",
+        "started_at": 1779277984510,
+        "finished_at": 1779277984552,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260523082226_decision_status_transition",
+        "started_at": 1779524546752,
+        "finished_at": 1779524546827,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260524080723_status_usage",
+        "started_at": 1779781824084,
+        "finished_at": 1779781824146,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260524110449_create_status_usage_table",
+        "started_at": 1779781824149,
+        "finished_at": 1779781824170,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260525081747_add_status_scope",
+        "started_at": 1779781824174,
+        "finished_at": 1779781824213,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260525094421_decision_status_to_generic_status",
+        "started_at": 1779781824217,
+        "finished_at": 1779781824277,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260525164039_risk_status_to_generic_status",
+        "started_at": 1779781824280,
+        "finished_at": 1779781824330,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260526100105_project_governed_status",
+        "started_at": 1779789665414,
+        "finished_at": 1779789665475,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260527073510_workstream_governed_status",
+        "started_at": 1779867310570,
+        "finished_at": 1779867310597,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260527132500_business_reference_codes",
+        "started_at": 1779881491376,
+        "finished_at": 1779881491376,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260530083428_add_project_manager_contact",
+        "started_at": 1780130069012,
+        "finished_at": 1780130069058,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260531084000_remove_legacy_risk_status",
+        "started_at": 1780212450752,
+        "finished_at": 1780212450813,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260531094500_remove_risk_action_text_status",
+        "started_at": 1780214194862,
+        "finished_at": 1780214194942,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260531101500_remove_decision_status_bridges",
+        "started_at": 1780215082431,
+        "finished_at": 1780215082551,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260601165000_remove_project_bridges",
+        "started_at": 1780325168100,
+        "finished_at": 1780325168100,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260601171220_agent_foundation",
+        "started_at": 1780334128798,
+        "finished_at": 1780334129077,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260601180122_agent_configuration",
+        "started_at": 1780336882623,
+        "finished_at": 1780336882801,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260602082851_agent_instruction_templates_and_intervals",
+        "started_at": 1780388931273,
+        "finished_at": 1780388931340,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260626183000_managed_narrative_lifecycle",
+        "started_at": 1782546122362,
+        "finished_at": 1782546122362,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      },
+      {
+        "migration_name": "20260629173000_structured_narrative_revisions",
+        "started_at": 1782743617961,
+        "finished_at": 1782743617961,
+        "rolled_back_at": null,
+        "applied_steps_count": 1
+      }
+    ]
+  },
+  "tableCounts": {
+    "AgentActionLog": 918,
+    "AgentApproval": 141,
+    "AgentCapability": 16,
+    "AgentConfigurationChangeLog": 6,
+    "AgentDefinition": 2,
+    "AgentInstruction": 152,
+    "AgentInstructionTemplate": 5,
+    "AgentRule": 12,
+    "AgentSourceConfig": 4,
+    "AgentSuggestion": 143,
+    "CustomerDna": 17,
+    "EventType": 16,
+    "EvidenceType": 11,
+    "ExecutiveIntelligence": 2,
+    "ManagedNarrative": 36,
+    "ManagedNarrativeRevision": 76,
+    "Organization": 4,
+    "OrganizationContact": 12,
+    "Phase": 15,
+    "Project": 5,
+    "ProjectDecision": 4,
+    "ProjectEvent": 16,
+    "ProjectReportingPack": 7,
+    "ProjectRisk": 4,
+    "ProjectRiskAction": 5,
+    "ProjectTask": 1,
+    "ProjectTemplate": 2,
+    "ProjectType": 3,
+    "ProjectWorkstream": 82,
+    "RiskActionEvidence": 4,
+    "RiskAssessment": 4,
+    "RiskCategory": 10,
+    "RiskReview": 3,
+    "RiskReviewDecisionLink": 0,
+    "RiskReviewOutcome": 5,
+    "RiskReviewType": 3,
+    "Status": 10,
+    "StatusScope": 12,
+    "StatusUsage": 27,
+    "TaskFamily": 12,
+    "TemplateWorkstream": 27,
+    "TimeEntry": 144,
+    "User": 1,
+    "WorkSession": 76,
+    "WorkSessionInterval": 125,
+    "WorkSessionPause": 53,
+    "Workstream": 79,
+    "_prisma_migrations": 43
+  },
+  "inventory": {
+    "users": [
+      {
+        "id": "f5f52a98-4a18-48bc-b0f7-788f1e3c9288",
+        "email": "marisa@example.com",
+        "fullName": "Marisa Engel",
+        "preferredLanguage": "EN",
+        "workSessionCount": 76,
+        "convertedTimeEntryCount": 65,
+        "ownedRiskCount": 4,
+        "ownedRiskActionCount": 4,
+        "agentInstructionCount": 152,
+        "agentApprovalCount": 141
+      }
+    ],
+    "ownerCandidates": [
+      {
+        "id": "f5f52a98-4a18-48bc-b0f7-788f1e3c9288",
+        "email": "marisa@example.com",
+        "fullName": "Marisa Engel",
+        "preferredLanguage": "EN",
+        "workSessionCount": 76,
+        "agentInstructionCount": 152,
+        "agentApprovalCount": 141,
+        "agentActionLogCount": 775
+      }
+    ],
+    "projects": [
+      {
+        "id": "c06e51ae-263b-4916-aa95-1a45c4585297",
+        "projectCode": "PR_0001",
+        "name": "Project Operations System Development",
+        "isActive": 1,
+        "governedStatusId": "440e75f9-08dd-4217-8bd8-51f906c84126",
+        "governedStatusCode": "IN_PROGRESS",
+        "projectTypeCode": "DP_INTPMO",
+        "workstreamCount": 54,
+        "eventCount": 15,
+        "timeEntryCount": 133,
+        "workSessionCount": 76,
+        "riskCount": 3,
+        "decisionCount": 3,
+        "reportingPackCount": 3,
+        "customerDnaCount": 0
+      },
+      {
+        "id": "96ecd7aa-b8f8-4036-b0af-c9d3e9d86bb6",
+        "projectCode": "PR_0002",
+        "name": "Migración a Business Central",
+        "isActive": 1,
+        "governedStatusId": "440e75f9-08dd-4217-8bd8-51f906c84126",
+        "governedStatusCode": "IN_PROGRESS",
+        "projectTypeCode": "IT_IMPL",
+        "workstreamCount": 21,
+        "eventCount": 0,
+        "timeEntryCount": 2,
+        "workSessionCount": 0,
+        "riskCount": 0,
+        "decisionCount": 0,
+        "reportingPackCount": 1,
+        "customerDnaCount": 17
+      },
+      {
+        "id": "06804c35-169f-4b32-904a-acc4edeaf08e",
+        "projectCode": "PR_0003",
+        "name": "Desarrollo ERP mentoría Consultoria",
+        "isActive": 1,
+        "governedStatusId": "4554c737-cb62-4927-807e-039f3c7d6372",
+        "governedStatusCode": "ON_HOLD",
+        "projectTypeCode": "DP_INTPMO",
+        "workstreamCount": 3,
+        "eventCount": 1,
+        "timeEntryCount": 0,
+        "workSessionCount": 0,
+        "riskCount": 1,
+        "decisionCount": 1,
+        "reportingPackCount": 1,
+        "customerDnaCount": 0
+      },
+      {
+        "id": "eb2f2794-1451-44b0-af2d-0387d828d6ac",
+        "projectCode": "PR_0004",
+        "name": "Board Intelligence Platform",
+        "isActive": 1,
+        "governedStatusId": "440e75f9-08dd-4217-8bd8-51f906c84126",
+        "governedStatusCode": "IN_PROGRESS",
+        "projectTypeCode": "DP_INTPMO",
+        "workstreamCount": 3,
+        "eventCount": 0,
+        "timeEntryCount": 7,
+        "workSessionCount": 0,
+        "riskCount": 0,
+        "decisionCount": 0,
+        "reportingPackCount": 1,
+        "customerDnaCount": 0
+      },
+      {
+        "id": "019fc34d-e142-4e36-b5cc-733815803f39",
+        "projectCode": "PR_0005",
+        "name": "BPLF Framework",
+        "isActive": 1,
+        "governedStatusId": "440e75f9-08dd-4217-8bd8-51f906c84126",
+        "governedStatusCode": "IN_PROGRESS",
+        "projectTypeCode": "DP_INTPMO",
+        "workstreamCount": 1,
+        "eventCount": 0,
+        "timeEntryCount": 2,
+        "workSessionCount": 0,
+        "riskCount": 0,
+        "decisionCount": 0,
+        "reportingPackCount": 1,
+        "customerDnaCount": 0
+      }
+    ],
+    "organizations": [
+      {
+        "id": "cmqhtb7hg002x5sv1qicumk4u",
+        "code": "COM-003",
+        "name": "Araiz Suministros Eléctricos",
+        "organizationType": "CLIENT",
+        "isActive": 1,
+        "contactCount": 8,
+        "issuerProjectCount": 0,
+        "clientProjectCount": 1,
+        "deliveryProjectCount": 0,
+        "executiveIntelligenceCount": 2
+      },
+      {
+        "id": "cmqq9xp7b0000ngv1tf5e53rc",
+        "code": "COM-004",
+        "name": "MMRelate",
+        "organizationType": "CLIENT",
+        "isActive": 1,
+        "contactCount": 1,
+        "issuerProjectCount": 0,
+        "clientProjectCount": 1,
+        "deliveryProjectCount": 0,
+        "executiveIntelligenceCount": 0
+      },
+      {
+        "id": "cmpcwmve400004kv195s0amjj",
+        "code": "COM-001",
+        "name": "Protervitas Consulting, S.L.",
+        "organizationType": "INTERNAL",
+        "isActive": 1,
+        "contactCount": 2,
+        "issuerProjectCount": 1,
+        "clientProjectCount": 1,
+        "deliveryProjectCount": 1,
+        "executiveIntelligenceCount": 0
+      },
+      {
+        "id": "cmpdqbf4800013kv1cddetuhy",
+        "code": "COM-002",
+        "name": "Zanini Autogrup, S. A.",
+        "organizationType": "CLIENT",
+        "isActive": 1,
+        "contactCount": 1,
+        "issuerProjectCount": 0,
+        "clientProjectCount": 0,
+        "deliveryProjectCount": 0,
+        "executiveIntelligenceCount": 0
+      }
+    ],
+    "contacts": [
+      {
+        "id": "cmqhtdrq1002z5sv1fcj9jzab",
+        "organizationId": "cmqhtb7hg002x5sv1qicumk4u",
+        "organizationName": "Araiz Suministros Eléctricos",
+        "name": "Carlota Petisme",
+        "email": "carlota.petisme@araiz.com",
+        "roleTitle": "RRHH",
+        "isSponsor": 0,
+        "isActive": 1,
+        "managedProjectCount": 0,
+        "sponsoredProjectCount": 0,
+        "executiveIntelligenceCount": 0
+      },
+      {
+        "id": "cmqhtea2900305sv1sn8zru3a",
+        "organizationId": "cmqhtb7hg002x5sv1qicumk4u",
+        "organizationName": "Araiz Suministros Eléctricos",
+        "name": "Diego Barroso",
+        "email": null,
+        "roleTitle": "Director Logística y Operaciones",
+        "isSponsor": 0,
+        "isActive": 1,
+        "managedProjectCount": 0,
+        "sponsoredProjectCount": 0,
+        "executiveIntelligenceCount": 0
+      },
+      {
+        "id": "cmrkhzu03000kmcv1x6ydeaid",
+        "organizationId": "cmqhtb7hg002x5sv1qicumk4u",
+        "organizationName": "Araiz Suministros Eléctricos",
+        "name": "Gustavo G",
+        "email": null,
+        "roleTitle": "Director Comercial",
+        "isSponsor": 0,
+        "isActive": 1,
+        "managedProjectCount": 0,
+        "sponsoredProjectCount": 0,
+        "executiveIntelligenceCount": 0
+      },
+      {
+        "id": "cmqhtd8yv002y5sv1bhh5si5n",
+        "organizationId": "cmqhtb7hg002x5sv1qicumk4u",
+        "organizationName": "Araiz Suministros Eléctricos",
+        "name": "Isaac Vicioso Araiz",
+        "email": null,
+        "roleTitle": "CEO",
+        "isSponsor": 0,
+        "isActive": 1,
+        "managedProjectCount": 0,
+        "sponsoredProjectCount": 1,
+        "executiveIntelligenceCount": 1
+      },
+      {
+        "id": "cmqhzgte900325sv1x628fy3x",
+        "organizationId": "cmqhtb7hg002x5sv1qicumk4u",
+        "organizationName": "Araiz Suministros Eléctricos",
+        "name": "Joaquín Araiz",
+        "email": null,
+        "roleTitle": "Presidente Grudilec",
+        "isSponsor": 0,
+        "isActive": 1,
+        "managedProjectCount": 0,
+        "sponsoredProjectCount": 0,
+        "executiveIntelligenceCount": 1
+      },
+      {
+        "id": "cmqhzh8k100335sv1m71c79f4",
+        "organizationId": "cmqhtb7hg002x5sv1qicumk4u",
+        "organizationName": "Araiz Suministros Eléctricos",
+        "name": "Juan Manuel Soto",
+        "email": null,
+        "roleTitle": "CIO",
+        "isSponsor": 0,
+        "isActive": 1,
+        "managedProjectCount": 0,
+        "sponsoredProjectCount": 0,
+        "executiveIntelligenceCount": 0
+      },
+      {
+        "id": "cmqhtf3gf00315sv1e2n6erqr",
+        "organizationId": "cmqhtb7hg002x5sv1qicumk4u",
+        "organizationName": "Araiz Suministros Eléctricos",
+        "name": "Pepe Hurtado",
+        "email": null,
+        "roleTitle": "Corporate Director",
+        "isSponsor": 0,
+        "isActive": 1,
+        "managedProjectCount": 0,
+        "sponsoredProjectCount": 0,
+        "executiveIntelligenceCount": 0
+      },
+      {
+        "id": "cmqhzil9y00345sv1z9wy6fl0",
+        "organizationId": "cmqhtb7hg002x5sv1qicumk4u",
+        "organizationName": "Araiz Suministros Eléctricos",
+        "name": "Santiago Ruiz",
+        "email": null,
+        "roleTitle": "CFO",
+        "isSponsor": 0,
+        "isActive": 1,
+        "managedProjectCount": 0,
+        "sponsoredProjectCount": 0,
+        "executiveIntelligenceCount": 0
+      },
+      {
+        "id": "cmqq9zws30001ngv1fopvwc25",
+        "organizationId": "cmqq9xp7b0000ngv1tf5e53rc",
+        "organizationName": "MMRelate",
+        "name": "Margarita Martínez",
+        "email": "mmartinez@mmrelate.com",
+        "roleTitle": "CEO",
+        "isSponsor": 1,
+        "isActive": 1,
+        "managedProjectCount": 0,
+        "sponsoredProjectCount": 1,
+        "executiveIntelligenceCount": 0
+      },
+      {
+        "id": "cmpcwy5e100034kv1n5d8sdri",
+        "organizationId": "cmpcwmve400004kv195s0amjj",
+        "organizationName": "Protervitas Consulting, S.L.",
+        "name": "Daniel Puig",
+        "email": "daniel.puig@protervitas.com",
+        "roleTitle": "Senior Project Manager",
+        "isSponsor": 1,
+        "isActive": 1,
+        "managedProjectCount": 0,
+        "sponsoredProjectCount": 0,
+        "executiveIntelligenceCount": 0
+      },
+      {
+        "id": "cmpcwxeua00024kv10ccbcdqf",
+        "organizationId": "cmpcwmve400004kv195s0amjj",
+        "organizationName": "Protervitas Consulting, S.L.",
+        "name": "Marisa Engel",
+        "email": "marisa.engel@protervitas.com",
+        "roleTitle": "Senior Project Manager",
+        "isSponsor": 1,
+        "isActive": 1,
+        "managedProjectCount": 5,
+        "sponsoredProjectCount": 0,
+        "executiveIntelligenceCount": 0
+      },
+      {
+        "id": "cmqqgyj7l0003ngv1o5igatqe",
+        "organizationId": "cmpdqbf4800013kv1cddetuhy",
+        "organizationName": "Zanini Autogrup, S. A.",
+        "name": "Xavier Serra",
+        "email": "xserra@zanini.com",
+        "roleTitle": "Group Operations Vice President",
+        "isSponsor": 0,
+        "isActive": 1,
+        "managedProjectCount": 0,
+        "sponsoredProjectCount": 0,
+        "executiveIntelligenceCount": 0
+      }
+    ],
+    "statusUsage": [
+      {
+        "scopeCode": "AGENT_APPROVAL",
+        "statusCode": "OPEN",
+        "statusName": "Open",
+        "isDefault": 1,
+        "isActive": 1,
+        "sortOrder": 10
+      },
+      {
+        "scopeCode": "AGENT_APPROVAL",
+        "statusCode": "APPROVED",
+        "statusName": "Approved",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 70
+      },
+      {
+        "scopeCode": "AGENT_APPROVAL",
+        "statusCode": "REJECTED",
+        "statusName": "Rejected",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 75
+      },
+      {
+        "scopeCode": "AGENT_APPROVAL",
+        "statusCode": "CLOSED",
+        "statusName": "Closed",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 80
+      },
+      {
+        "scopeCode": "AGENT_APPROVAL",
+        "statusCode": "CANCELLED",
+        "statusName": "Cancelled",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 90
+      },
+      {
+        "scopeCode": "AGENT_INSTRUCTION",
+        "statusCode": "OPEN",
+        "statusName": "Open",
+        "isDefault": 1,
+        "isActive": 1,
+        "sortOrder": 10
+      },
+      {
+        "scopeCode": "AGENT_INSTRUCTION",
+        "statusCode": "IN_PROGRESS",
+        "statusName": "In progress",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 20
+      },
+      {
+        "scopeCode": "AGENT_INSTRUCTION",
+        "statusCode": "CLOSED",
+        "statusName": "Closed",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 80
+      },
+      {
+        "scopeCode": "AGENT_INSTRUCTION",
+        "statusCode": "CANCELLED",
+        "statusName": "Cancelled",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 90
+      },
+      {
+        "scopeCode": "AGENT_SUGGESTION",
+        "statusCode": "OPEN",
+        "statusName": "Open",
+        "isDefault": 1,
+        "isActive": 1,
+        "sortOrder": 10
+      },
+      {
+        "scopeCode": "AGENT_SUGGESTION",
+        "statusCode": "APPROVED",
+        "statusName": "Approved",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 70
+      },
+      {
+        "scopeCode": "AGENT_SUGGESTION",
+        "statusCode": "REJECTED",
+        "statusName": "Rejected",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 75
+      },
+      {
+        "scopeCode": "AGENT_SUGGESTION",
+        "statusCode": "CLOSED",
+        "statusName": "Closed",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 80
+      },
+      {
+        "scopeCode": "AGENT_SUGGESTION",
+        "statusCode": "CANCELLED",
+        "statusName": "Cancelled",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 90
+      },
+      {
+        "scopeCode": "DECISION",
+        "statusCode": "APPROVED",
+        "statusName": "Approved",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 100
+      },
+      {
+        "scopeCode": "DECISION",
+        "statusCode": "REJECTED",
+        "statusName": "Rejected",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 100
+      },
+      {
+        "scopeCode": "DEFAULT",
+        "statusCode": "CANCELLED",
+        "statusName": "Cancelled",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 100
+      },
+      {
+        "scopeCode": "DEFAULT",
+        "statusCode": "CLOSED",
+        "statusName": "Closed",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 100
+      },
+      {
+        "scopeCode": "DEFAULT",
+        "statusCode": "COMPLETED",
+        "statusName": "Completed",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 100
+      },
+      {
+        "scopeCode": "DEFAULT",
+        "statusCode": "DRAFT",
+        "statusName": "Draft",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 100
+      },
+      {
+        "scopeCode": "DEFAULT",
+        "statusCode": "IN_PROGRESS",
+        "statusName": "In progress",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 100
+      },
+      {
+        "scopeCode": "DEFAULT",
+        "statusCode": "ON_HOLD",
+        "statusName": "On Hold",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 100
+      },
+      {
+        "scopeCode": "DEFAULT",
+        "statusCode": "OPEN",
+        "statusName": "Open",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 100
+      },
+      {
+        "scopeCode": "WORK_SESSION",
+        "statusCode": "IN_PROGRESS",
+        "statusName": "In progress",
+        "isDefault": 1,
+        "isActive": 1,
+        "sortOrder": 10
+      },
+      {
+        "scopeCode": "WORK_SESSION",
+        "statusCode": "ON_HOLD",
+        "statusName": "On Hold",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 20
+      },
+      {
+        "scopeCode": "WORK_SESSION",
+        "statusCode": "CLOSED",
+        "statusName": "Closed",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 80
+      },
+      {
+        "scopeCode": "WORK_SESSION",
+        "statusCode": "CANCELLED",
+        "statusName": "Cancelled",
+        "isDefault": 0,
+        "isActive": 1,
+        "sortOrder": 90
+      }
+    ],
+    "duplicateCodes": {
+      "Project.projectCode": [],
+      "ProjectRisk.riskCode": [],
+      "ProjectRiskAction.actionCode": [],
+      "ProjectDecision.decisionCode": [],
+      "Organization.code": [],
+      "Status.code": [],
+      "StatusScope.code": [],
+      "ProjectType.code": [],
+      "TaskFamily.code": [],
+      "EventType.code": [],
+      "RiskCategory.code": [],
+      "EvidenceType.code": [],
+      "RiskReviewType.code": [],
+      "RiskReviewOutcome.code": []
+    },
+    "nullableRelationCoverage": {
+      "Project.projectTypeId": {
+        "total": 5,
+        "populated": 5,
+        "nullCount": 0,
+        "populatedPercent": 100
+      },
+      "Project.issuerOrganizationId": {
+        "total": 5,
+        "populated": 1,
+        "nullCount": 4,
+        "populatedPercent": 20
+      },
+      "Project.clientOrganizationId": {
+        "total": 5,
+        "populated": 3,
+        "nullCount": 2,
+        "populatedPercent": 60
+      },
+      "Project.deliveryOrganizationId": {
+        "total": 5,
+        "populated": 1,
+        "nullCount": 4,
+        "populatedPercent": 20
+      },
+      "Project.projectManagerContactId": {
+        "total": 5,
+        "populated": 5,
+        "nullCount": 0,
+        "populatedPercent": 100
+      },
+      "Project.sponsorContactId": {
+        "total": 5,
+        "populated": 2,
+        "nullCount": 3,
+        "populatedPercent": 40
+      },
+      "ProjectWorkstream.governedStatusId": {
+        "total": 82,
+        "populated": 19,
+        "nullCount": 63,
+        "populatedPercent": 23.17
+      },
+      "ProjectEvent.eventTypeId": {
+        "total": 16,
+        "populated": 16,
+        "nullCount": 0,
+        "populatedPercent": 100
+      },
+      "ProjectEvent.linkedProjectWorkstreamId": {
+        "total": 16,
+        "populated": 9,
+        "nullCount": 7,
+        "populatedPercent": 56.25
+      },
+      "TimeEntry.projectTaskId": {
+        "total": 144,
+        "populated": 0,
+        "nullCount": 144,
+        "populatedPercent": 0
+      },
+      "AgentInstruction.userId": {
+        "total": 152,
+        "populated": 152,
+        "nullCount": 0,
+        "populatedPercent": 100
+      },
+      "AgentInstruction.projectId": {
+        "total": 152,
+        "populated": 150,
+        "nullCount": 2,
+        "populatedPercent": 98.68
+      },
+      "WorkSession.taskFamilyId": {
+        "total": 76,
+        "populated": 76,
+        "nullCount": 0,
+        "populatedPercent": 100
+      },
+      "WorkSession.projectTaskId": {
+        "total": 76,
+        "populated": 0,
+        "nullCount": 76,
+        "populatedPercent": 0
+      },
+      "ProjectRisk.ownerId": {
+        "total": 4,
+        "populated": 4,
+        "nullCount": 0,
+        "populatedPercent": 100
+      },
+      "RiskAssessment.assessedByUserId": {
+        "total": 4,
+        "populated": 3,
+        "nullCount": 1,
+        "populatedPercent": 75
+      },
+      "RiskReview.reviewedByUserId": {
+        "total": 3,
+        "populated": 1,
+        "nullCount": 2,
+        "populatedPercent": 33.33
+      },
+      "ProjectRiskAction.ownerId": {
+        "total": 5,
+        "populated": 4,
+        "nullCount": 1,
+        "populatedPercent": 80
+      },
+      "ExecutiveIntelligence.contactId": {
+        "total": 2,
+        "populated": 2,
+        "nullCount": 0,
+        "populatedPercent": 100
+      },
+      "ExecutiveIntelligence.createdByUserId": {
+        "total": 2,
+        "populated": 1,
+        "nullCount": 1,
+        "populatedPercent": 50
+      }
+    },
+    "destructiveScriptWarnings": {
+      "deleteTestProjectsScriptPresent": true,
+      "prismaSeedConfiguredButMissing": true
+    }
+  },
+  "relationshipHealth": {
+    "orphanChecks": []
+  },
+  "operatorDecisionsRequired": [
+    "Approve the canonical live database fingerprint before any production migration.",
+    "Approve the owner User.id for OWNER_ADMIN bootstrap.",
+    "Decide whether Organization and OrganizationContact receive direct workspaceId in V3.3.",
+    "Decide whether ProjectMembership is required in the first security migration or deferred.",
+    "Approve synthetic demo fixture scope before any Demo Viewer invitation."
+  ]
+}

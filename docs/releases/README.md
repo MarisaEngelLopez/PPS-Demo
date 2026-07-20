@@ -25,4 +25,5 @@ Use this as the navigation page. If a document does not clearly belong to a rele
 - `2026-06-26-narrative-engine` - Narrative engine, managed narrative objects, executive briefing framework, and related testing.
 - `2026-07-04-testing-checkpoint` - July testing checkpoint documents.
 - `2026-07-14-freeze-candidate` - Current freeze candidate checkpoint.
+- `2026-07-17-security-demo-live-data-migration` - V3.3 security demo and live data migration architecture for the next release.
 - `_unclassified` - Holding area for documents that need a later decision.

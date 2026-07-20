@@ -44,6 +44,18 @@ enum RiskAssessmentType {
   RESIDUAL
 }
 
+enum WorkspaceType {
+  LIVE
+  DEMO
+  TEST
+}
+
+enum AuditOutcome {
+  SUCCESS
+  DENIED
+  FAILURE
+}
+
 model User {
   id                String       @id @default(uuid())
   email             String       @unique
@@ -64,6 +76,172 @@ model User {
   ownedCustomerDna             CustomerDna[]                 @relation("CustomerDnaOwner")
   createdCustomerDna           CustomerDna[]                 @relation("CustomerDnaCreatedBy")
   createdExecutiveIntelligence ExecutiveIntelligence[]       @relation("ExecutiveIntelligenceCreatedBy")
+  authUsers                    AuthUser[]
+  workspaceMemberships         WorkspaceMembership[]
+  projectMemberships           ProjectMembership[]
+  auditEvents                  AuditEvent[]                  @relation("AuditEventActor")
+}
+
+model AuthUser {
+  id            String    @id @default(cuid())
+  appUserId     String?
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  appUser  User?         @relation(fields: [appUserId], references: [id], onDelete: SetNull)
+  sessions AuthSession[]
+  accounts AuthAccount[]
+
+  @@index([appUserId])
+}
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuthAccount {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model AuthVerification {
+  id         String    @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([identifier])
+  @@index([expiresAt])
+}
+
+model Workspace {
+  id        String        @id @default(cuid())
+  code      String        @unique
+  name      String
+  type      WorkspaceType
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  projects      Project[]
+  organizations Organization[]
+  memberships   WorkspaceMembership[]
+  auditEvents   AuditEvent[]
+
+  @@index([type])
+  @@index([isActive])
+}
+
+model Role {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceMemberships WorkspaceMembership[]
+  projectMemberships   ProjectMembership[]
+
+  @@index([isActive])
+}
+
+model WorkspaceMembership {
+  id          String    @id @default(cuid())
+  userId      String
+  workspaceId String
+  roleId      String
+  isActive    Boolean   @default(true)
+  validFrom   DateTime?
+  validTo     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+  @@index([roleId])
+  @@index([isActive])
+}
+
+model ProjectMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  roleId    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  role    Role    @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, projectId])
+  @@index([projectId])
+  @@index([roleId])
+  @@index([isActive])
+}
+
+model AuditEvent {
+  id          String       @id @default(cuid())
+  actorUserId String?
+  action      String
+  entityType  String?
+  entityId    String?
+  workspaceId String?
+  projectId   String?
+  outcome     AuditOutcome @default(SUCCESS)
+  metadataJson String?
+  createdAt   DateTime     @default(now())
+
+  actor    User?      @relation("AuditEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  project   Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([workspaceId])
+  @@index([projectId])
+  @@index([action])
+  @@index([outcome])
+  @@index([createdAt])
 }
 
 model Status {
@@ -135,6 +313,7 @@ model ProjectType {
 
 model Project {
   id                 String             @id @default(uuid())
+  workspaceId        String?
   projectCode        String             @unique
   name               String
   nameEs             String?
@@ -156,6 +335,7 @@ model Project {
   actualStartDate    DateTime?
   actualEndDate      DateTime?
 
+  workspace          Workspace?          @relation(fields: [workspaceId], references: [id])
   projectType        ProjectType?        @relation(fields: [projectTypeId], references: [id])
   governedStatus     Status              @relation(fields: [governedStatusId], references: [id])
   projectWorkstreams ProjectWorkstream[]
@@ -189,6 +369,10 @@ model Project {
   reportingPacks    ProjectReportingPack[]
   managedNarratives ManagedNarrative[]
   projectDecisions  ProjectDecision[]
+  projectMemberships ProjectMembership[]
+  auditEvents       AuditEvent[]
+
+  @@index([workspaceId])
 }
 
 model TaskFamily {
@@ -1015,6 +1199,7 @@ model RiskActionEvidence {
 
 model Organization {
   id               String  @id @default(cuid())
+  workspaceId      String?
   code             String? @unique
   name             String
   legalName        String?
@@ -1027,7 +1212,8 @@ model Organization {
   notes            String?
   isActive         Boolean @default(true)
 
-  contacts OrganizationContact[]
+  workspace Workspace? @relation(fields: [workspaceId], references: [id])
+  contacts  OrganizationContact[]
 
   issuerProjects             Project[]               @relation("ProjectIssuerOrganization")
   clientProjects             Project[]               @relation("ProjectClientOrganization")
@@ -1037,6 +1223,7 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([workspaceId])
   @@index([name])
   @@index([organizationType])
   @@index([isActive])

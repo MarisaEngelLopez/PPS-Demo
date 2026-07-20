@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 import {
   calculateWorkSessionDuration,
   claimAgentSuggestionApplication,
@@ -35,10 +36,10 @@ import {
   getPositionReferencedCandidate,
   getCandidateConfidence,
   parseTimeTrackingNaturalLanguage,
-  projectReferenceAliases,
   rankNaturalLanguageCandidates,
   type TimeTrackingInterpretation,
 } from "@/lib/domain/agents/naturalLanguageInterpreter";
+import { resolveProjectContext } from "@/lib/domain/agents/projectContextResolver";
 import type { AgentJsonValue } from "@/lib/domain/agents/agentTypes";
 
 const TIME_TRACKING_PATH = "/time-tracking";
@@ -139,14 +140,20 @@ async function validateTimeLinks(input: {
   taskFamilyId: string;
   projectTaskId?: string | null;
 }) {
+  const selectedWorkspace = await getSelectedWorkspace();
   const [project, projectWorkstream, taskFamily, projectTask] = await Promise.all([
     prisma.project.findFirst({
-      where: { id: input.projectId, isActive: true },
+      where: {
+        id: input.projectId,
+        isActive: true,
+        workspaceId: selectedWorkspace.id,
+      },
     }),
     prisma.projectWorkstream.findFirst({
       where: {
         id: input.projectWorkstreamId,
         projectId: input.projectId,
+        project: { workspaceId: selectedWorkspace.id },
       },
     }),
     prisma.taskFamily.findFirst({
@@ -158,6 +165,7 @@ async function validateTimeLinks(input: {
             id: input.projectTaskId,
             projectWorkstreamId: input.projectWorkstreamId,
             isActive: true,
+            projectWorkstream: { project: { workspaceId: selectedWorkspace.id } },
           },
         })
       : Promise.resolve(null),
@@ -175,6 +183,38 @@ async function validateTimeLinks(input: {
   return null;
 }
 
+async function workSessionInSelectedWorkspace(id: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
+  return prisma.workSession.findFirst({
+    where: {
+      id,
+      project: { workspaceId: selectedWorkspace.id },
+    },
+  });
+}
+
+async function agentSuggestionInSelectedWorkspace(suggestion: {
+  instruction?: { projectId: string | null } | null;
+  payloadJson: string | null;
+}) {
+  const selectedWorkspace = await getSelectedWorkspace();
+  const payload = parseAgentJson<AgentJsonValue>(suggestion.payloadJson, {});
+  const payloadProjectId =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? String(payload.projectId || "")
+      : "";
+  const projectId = suggestion.instruction?.projectId ?? payloadProjectId;
+
+  if (!projectId) return false;
+
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, workspaceId: selectedWorkspace.id },
+    select: { id: true },
+  });
+
+  return Boolean(project);
+}
+
 async function getOpenWorkSessionStatusIds() {
   const [inProgress, onHold] = await Promise.all([
     getAgentStatusByCodeForScope(prisma, "WORK_SESSION", "IN_PROGRESS"),
@@ -187,6 +227,7 @@ async function getOpenWorkSessionStatusIds() {
 async function buildCurrentSessionOptions(rawInstruction: string) {
   const user = await getOneUserAgentUser();
   if (!user) return null;
+  const selectedWorkspace = await getSelectedWorkspace();
 
   const [inProgress, onHold] = await Promise.all([
     getAgentStatusByCodeForScope(prisma, "WORK_SESSION", "IN_PROGRESS"),
@@ -201,6 +242,7 @@ async function buildCurrentSessionOptions(rawInstruction: string) {
       userId: user.id,
       statusId: { in: statusIds },
       convertedTimeEntryId: null,
+      project: { workspaceId: selectedWorkspace.id },
     },
     include: {
       status: true,
@@ -405,18 +447,19 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
         confidence: "LOW",
         rawInstruction,
         understoodText: "",
-        clarification: "Try: I am starting work on Project Progress Assistant.",
+        clarification: "Please say or select the project first, then the workstream.",
       },
     };
   }
 
+  const selectedWorkspace = await getSelectedWorkspace();
   const [projects, projectWorkstreams, taskFamilies, projectTasks] = await Promise.all([
     prisma.project.findMany({
-      where: { isActive: true },
+      where: { isActive: true, workspaceId: selectedWorkspace.id },
       orderBy: [{ projectCode: "asc" }, { name: "asc" }],
     }),
     prisma.projectWorkstream.findMany({
-      where: { isActive: true },
+      where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
       include: {
         project: true,
         governedStatus: true,
@@ -433,30 +476,44 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
     prisma.projectTask.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        projectWorkstream: { project: { workspaceId: selectedWorkspace.id } },
+      },
       include: { parentTask: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
   ]);
 
-  const projectCandidates = rankNaturalLanguageCandidates(
+  const projectContext = resolveProjectContext({
     rawInstruction,
-    projects.map((project) => ({
-      id: project.id,
-      label: `${project.projectCode} - ${project.name}`,
-      aliases: projectReferenceAliases(project),
-    }))
-  );
-  const spokenProjectId = projectCandidates[0]?.score >= 4 ? projectCandidates[0].id : null;
-  const defaultProjectId = projects.some((project) => project.id === selectedProjectId)
-    ? selectedProjectId
-    : null;
-  const effectiveSelectedProjectId = spokenProjectId ?? defaultProjectId;
+    selectedProjectId,
+    projects,
+  });
+  const effectiveSelectedProjectId = projectContext.projectId;
+  if (!effectiveSelectedProjectId) {
+    return {
+      ok: false,
+      message: "I could not identify the project.",
+      interpretation: {
+        intent,
+        confidence: "LOW",
+        rawInstruction,
+        understoodText: "",
+        clarification: "Please say the project name or select a project before using voice input.",
+        candidates: {
+          projects: projectContext.candidates,
+          workstreams: [],
+          tasks: [],
+        },
+      },
+    };
+  }
 
   const phaseReference = extractPhaseReference(rawInstruction);
-  const projectWorkstreamPool = effectiveSelectedProjectId
-    ? projectWorkstreams.filter((workstream) => workstream.projectId === effectiveSelectedProjectId)
-    : projectWorkstreams;
+  const projectWorkstreamPool = projectWorkstreams.filter(
+    (workstream) => workstream.projectId === effectiveSelectedProjectId
+  );
   const phaseFilteredWorkstreamPool = phaseReference
     ? projectWorkstreamPool.filter((workstream) =>
         isTimeTrackingEligibleWorkstream(workstream) &&
@@ -475,7 +532,7 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
         clarification:
           "Please check that the phase has an active workstream available for time tracking.",
         candidates: {
-          projects: projectCandidates,
+          projects: projectContext.candidates,
           workstreams: [],
           tasks: [],
         },
@@ -518,7 +575,10 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
         ? [positionReferencedWorkstream]
       : workstreamCandidates;
   const selectedProjectWorkstreamId =
-    uniquePhaseWorkstream?.id ?? effectiveWorkstreamCandidates[0]?.id ?? workstreamPool[0]?.id;
+    uniquePhaseWorkstream?.id ??
+    (effectiveWorkstreamCandidates[0]?.score >= 4
+      ? effectiveWorkstreamCandidates[0].id
+      : undefined);
   const projectWorkstream = projectWorkstreams.find(
     (item) => item.id === selectedProjectWorkstreamId
   );
@@ -547,12 +607,12 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
     taskFamilies.find((family) => family.name.toLowerCase() === "mis") ??
     taskFamilies[0];
 
-  const projectConfidence = getCandidateConfidence(projectCandidates);
+  const projectConfidence = getCandidateConfidence(projectContext.candidates);
   const workstreamConfidence = uniquePhaseWorkstream
     ? "HIGH"
     : getCandidateConfidence(effectiveWorkstreamCandidates);
   const effectiveProjectConfidence =
-    projectCandidates.length > 0
+    projectContext.candidates.length > 0
       ? projectConfidence
       : projectWorkstream
         ? "HIGH"
@@ -575,7 +635,7 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
         understoodText: "",
         clarification: "Please include a project or workstream name.",
         candidates: {
-          projects: projectCandidates,
+          projects: projectContext.candidates,
           workstreams: effectiveWorkstreamCandidates,
           tasks: taskCandidates,
         },
@@ -620,7 +680,7 @@ export async function interpretTimeTrackingInstruction(formData: FormData): Prom
           ? "Please review the match before confirming."
           : null,
       candidates: {
-        projects: projectCandidates,
+        projects: projectContext.candidates,
         workstreams: effectiveWorkstreamCandidates,
         tasks: taskCandidates,
       },
@@ -676,10 +736,12 @@ export async function startWorkSession(formData: FormData) {
   const openStatusIds = await getOpenWorkSessionStatusIds();
 
   if (enforceSingleSession && openStatusIds.length > 0) {
+    const selectedWorkspace = await getSelectedWorkspace();
     const existingSession = await prisma.workSession.findFirst({
       where: {
         userId: user.id,
         statusId: { in: openStatusIds },
+        project: { workspaceId: selectedWorkspace.id },
       },
     });
 
@@ -781,10 +843,12 @@ export async function updateWorkSessionNotes(formData: FormData) {
   if (!id) return agentError("Work session notes not updated: missing session id.");
 
   const openStatusIds = await getOpenWorkSessionStatusIds();
+  const selectedWorkspace = await getSelectedWorkspace();
   const session = await prisma.workSession.findFirst({
     where: {
       id,
       statusId: { in: openStatusIds },
+      project: { workspaceId: selectedWorkspace.id },
     },
   });
   if (!session) {
@@ -827,8 +891,12 @@ export async function pauseWorkSession(formData: FormData) {
   const onHoldStatus = await getAgentStatusByCodeForScope(prisma, "WORK_SESSION", "ON_HOLD");
   if (!onHoldStatus) return agentError("Work session not paused: missing status setup.");
 
-  const session = await prisma.workSession.findUnique({
-    where: { id },
+  const selectedWorkspace = await getSelectedWorkspace();
+  const session = await prisma.workSession.findFirst({
+    where: {
+      id,
+      project: { workspaceId: selectedWorkspace.id },
+    },
     include: { pauses: { where: { resumedAt: null } } },
   });
   if (!session) return agentError("Work session not paused: it no longer exists.");
@@ -882,8 +950,13 @@ export async function resumeWorkSession(formData: FormData) {
   );
   if (!inProgressStatus) return agentError("Work session not resumed: missing status setup.");
 
+  const selectedWorkspace = await getSelectedWorkspace();
   const openPause = await prisma.workSessionPause.findFirst({
-    where: { workSessionId: id, resumedAt: null },
+    where: {
+      workSessionId: id,
+      resumedAt: null,
+      workSession: { project: { workspaceId: selectedWorkspace.id } },
+    },
     include: { workSession: true },
     orderBy: { pausedAt: "desc" },
   });
@@ -934,8 +1007,12 @@ export async function finishWorkSession(formData: FormData) {
   const clientNow = parseClientTimestamp(formData.get("clientTimestamp"));
   if (!id) return agentError("Work session not finished: missing session id.");
 
-  const session = await prisma.workSession.findUnique({
-    where: { id },
+  const selectedWorkspace = await getSelectedWorkspace();
+  const session = await prisma.workSession.findFirst({
+    where: {
+      id,
+      project: { workspaceId: selectedWorkspace.id },
+    },
     include: {
       project: true,
       projectWorkstream: { include: { workstream: true } },
@@ -1077,7 +1154,7 @@ export async function cancelWorkSession(formData: FormData) {
   );
   if (!cancelledStatus) return agentError("Work session not cancelled: missing status setup.");
 
-  const session = await prisma.workSession.findUnique({ where: { id } });
+  const session = await workSessionInSelectedWorkspace(id);
   if (!session) return agentError("Work session not cancelled: it no longer exists.");
 
   const cancelledAt = clientNow ?? new Date();
@@ -1129,6 +1206,10 @@ export async function approveTimeEntrySuggestion(formData: FormData) {
   });
   if (!suggestion) return agentError("Suggestion not approved: it no longer exists.");
   if (suggestion.appliedAt) return agentError("Suggestion already applied.");
+  if (!(await agentSuggestionInSelectedWorkspace(suggestion))) {
+    return agentError("Suggestion not approved: it does not belong to the selected workspace.");
+  }
+  const selectedWorkspace = await getSelectedWorkspace();
 
   const payload = parseAgentJson<AgentJsonValue>(suggestion.payloadJson, {});
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
@@ -1189,10 +1270,17 @@ export async function approveTimeEntrySuggestion(formData: FormData) {
     });
 
     if (workSessionId) {
-      const sourceSession = await tx.workSession.findUnique({
-        where: { id: workSessionId },
+      const sourceSession = await tx.workSession.findFirst({
+        where: {
+          id: workSessionId,
+          project: { workspaceId: selectedWorkspace.id },
+        },
         select: { convertedTimeEntryId: true },
       });
+      if (!sourceSession) {
+        duplicateWorkSessionConversion = true;
+        throw new Error("DUPLICATE_WORK_SESSION_CONVERSION");
+      }
       if (sourceSession?.convertedTimeEntryId) {
         duplicateWorkSessionConversion = true;
         throw new Error("DUPLICATE_WORK_SESSION_CONVERSION");
@@ -1223,6 +1311,7 @@ export async function approveTimeEntrySuggestion(formData: FormData) {
         where: {
           id: workSessionId,
           convertedTimeEntryId: null,
+          project: { workspaceId: selectedWorkspace.id },
         },
         data: { convertedTimeEntryId: timeEntry.id },
       });
@@ -1279,8 +1368,14 @@ export async function rejectTimeEntrySuggestion(formData: FormData) {
   const id = asString(formData.get("id"));
   if (!id) return agentError("Suggestion not rejected: missing id.");
 
-  const suggestion = await prisma.agentSuggestion.findUnique({ where: { id } });
+  const suggestion = await prisma.agentSuggestion.findUnique({
+    where: { id },
+    include: { instruction: true },
+  });
   if (!suggestion) return agentError("Suggestion not rejected: it no longer exists.");
+  if (!(await agentSuggestionInSelectedWorkspace(suggestion))) {
+    return agentError("Suggestion not rejected: it does not belong to the selected workspace.");
+  }
 
   const [approvalStatus, suggestionStatus] = await Promise.all([
     getAgentStatusByCodeForScope(prisma, "AGENT_APPROVAL", "REJECTED"),

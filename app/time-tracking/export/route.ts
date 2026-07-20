@@ -2,13 +2,16 @@ import ExcelJS from "exceljs";
 
 import { prisma } from "@/lib/prisma";
 import { getServerLocale } from "@/lib/i18n/server";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   const locale = await getServerLocale();
+  const selectedWorkspace = await getSelectedWorkspace();
   const isSpanish = locale === "es";
   const entries = await prisma.timeEntry.findMany({
+    where: { project: { workspaceId: selectedWorkspace.id } },
     include: {
       project: true,
       taskFamily: true,

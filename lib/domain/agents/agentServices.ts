@@ -1,6 +1,7 @@
 import type { AgentSourceType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  parseAgentJson,
   roundMinutesToIncrement,
   stringifyAgentJson,
 } from "./agentRules";
@@ -153,6 +154,50 @@ export async function createAgentSuggestion(
   });
 
   return suggestion;
+}
+
+export async function findOpenDuplicateAgentSuggestion(
+  db: AgentDbClient,
+  input: {
+    agentKey: AgentKey;
+    projectId: string;
+    targetEntity: AgentTargetEntity;
+    targetRecordId?: string | null;
+    command?: string | null;
+  }
+) {
+  const candidates = await db.agentSuggestion.findMany({
+    where: {
+      agentKey: input.agentKey,
+      appliedAt: null,
+      status: { code: "OPEN" },
+      targetEntity: input.targetEntity,
+      targetRecordId: input.targetRecordId ?? null,
+      instruction: { projectId: input.projectId },
+    },
+    select: {
+      id: true,
+      title: true,
+      payloadJson: true,
+      createdAt: true,
+    },
+    orderBy: [{ createdAt: "desc" }],
+    take: 10,
+  });
+
+  if (!input.command) return candidates[0] ?? null;
+
+  return (
+    candidates.find((candidate) => {
+      const payload = parseAgentJson<AgentJsonValue>(candidate.payloadJson, {});
+      return (
+        payload &&
+        typeof payload === "object" &&
+        !Array.isArray(payload) &&
+        payload.command === input.command
+      );
+    }) ?? null
+  );
 }
 
 export async function claimAgentSuggestionApplication(

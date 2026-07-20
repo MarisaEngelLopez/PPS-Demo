@@ -1,13 +1,17 @@
 import { prisma } from "@/lib/prisma";
 import { NEXT_DRAFT_SOURCE_STATUSES } from "@/lib/domain/reporting/reportingPackRules";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 export const reportingPackOrderBy = [
   { version: "desc" as const },
   { createdAt: "desc" as const },
 ];
 
-export function getReportingPacksForAdmin() {
+export async function getReportingPacksForAdmin() {
+  const selectedWorkspace = await getSelectedWorkspace();
+
   return prisma.projectReportingPack.findMany({
+    where: { project: { workspaceId: selectedWorkspace.id } },
     include: {
       project: {
         select: {
@@ -25,10 +29,13 @@ export function getReportingPacksForAdmin() {
   });
 }
 
-export function getLatestNextDraftSourcePack(projectId: string) {
+export async function getLatestNextDraftSourcePack(projectId: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
+
   return prisma.projectReportingPack.findFirst({
     where: {
       projectId,
+      project: { workspaceId: selectedWorkspace.id },
       isActive: true,
       status: {
         in: NEXT_DRAFT_SOURCE_STATUSES,
@@ -38,18 +45,23 @@ export function getLatestNextDraftSourcePack(projectId: string) {
   });
 }
 
-export function getLatestReportingPack(projectId: string) {
+export async function getLatestReportingPack(projectId: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
+
   return prisma.projectReportingPack.findFirst({
     where: {
       projectId,
+      project: { workspaceId: selectedWorkspace.id },
     },
     orderBy: reportingPackOrderBy,
   });
 }
 
-export function getReportingPackStatus(id: string) {
-  return prisma.projectReportingPack.findUnique({
-    where: { id },
+export async function getReportingPackStatus(id: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
+
+  return prisma.projectReportingPack.findFirst({
+    where: { id, project: { workspaceId: selectedWorkspace.id } },
     select: { status: true, projectId: true },
   });
 }

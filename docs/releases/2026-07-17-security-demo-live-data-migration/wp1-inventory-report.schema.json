@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://project-ops-system.local/schemas/v3-3/wp1-inventory-report.schema.json",
+  "title": "Project Operations System V3.3 WP1 Inventory Report",
+  "type": "object",
+  "required": [
+    "reportType",
+    "generatedAt",
+    "database",
+    "checks",
+    "prisma",
+    "tableCounts",
+    "inventory",
+    "relationshipHealth",
+    "operatorDecisionsRequired"
+  ],
+  "properties": {
+    "reportType": {
+      "const": "V3_3_SECURITY_WP1_INVENTORY"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "database": {
+      "type": "object",
+      "required": [
+        "configuredUrl",
+        "resolvedPath",
+        "classification",
+        "bytes",
+        "sha256",
+        "modifiedAt"
+      ],
+      "properties": {
+        "configuredUrl": { "type": "string" },
+        "resolvedPath": { "type": "string" },
+        "classification": {
+          "enum": ["PROTECTED_LIVE", "LEGACY_REPO_DEV", "SANDBOX_DEV", "CUSTOM"]
+        },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "modifiedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "checks": {
+      "type": "object",
+      "required": ["integrityCheck", "foreignKeyCheck", "orphanCheckFailureCount"],
+      "properties": {
+        "integrityCheck": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "foreignKeyCheck": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "orphanCheckFailureCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "prisma": {
+      "type": "object",
+      "required": ["migrationCount", "migrations"],
+      "properties": {
+        "migrationCount": { "type": "integer", "minimum": 0 },
+        "migrations": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "tableCounts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "required": [
+        "users",
+        "ownerCandidates",
+        "projects",
+        "organizations",
+        "contacts",
+        "statusUsage",
+        "duplicateCodes",
+        "nullableRelationCoverage",
+        "destructiveScriptWarnings"
+      ],
+      "additionalProperties": true
+    },
+    "relationshipHealth": {
+      "type": "object",
+      "required": ["orphanChecks"],
+      "properties": {
+        "orphanChecks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "childTable", "childColumn", "parentTable", "count", "sample"],
+            "properties": {
+              "name": { "type": "string" },
+              "childTable": { "type": "string" },
+              "childColumn": { "type": "string" },
+              "parentTable": { "type": "string" },
+              "count": { "type": "integer", "minimum": 1 },
+              "sample": {
+                "type": "array",
+                "items": { "type": "object" }
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "operatorDecisionsRequired": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}

@@ -38,6 +38,7 @@ import {
   serializeNarrativeDocument,
 } from "@/lib/domain/narrative/narrativeDocument";
 import { getBriefingContentBudget } from "@/lib/domain/narrative/briefingContentBudget";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 const PRESENTATION_FIELDS: Array<[string, ManagedNarrativeObjectKey]> = [
   ["executiveSummaryPresentationMode", "executive-summary"],
@@ -59,10 +60,19 @@ function parsePresentationPreferences(formData: FormData) {
   ) as Partial<Record<ManagedNarrativeObjectKey, NarrativePresentationPreference>>;
 }
 
+async function projectInSelectedWorkspace(projectId: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
+  return prisma.project.findFirst({
+    where: { id: projectId, workspaceId: selectedWorkspace.id },
+    select: { id: true },
+  });
+}
+
 export async function createFirstReportingPack(formData: FormData) {
   const projectId = String(formData.get("projectId") || "");
 
   if (!projectId) return;
+  if (!(await projectInSelectedWorkspace(projectId))) return;
 
   await prisma.projectReportingPack.create({
     data: {
@@ -90,6 +100,7 @@ export async function createReportingPackFromLatest(formData: FormData) {
   const projectId = String(formData.get("projectId") || "");
 
   if (!projectId) return;
+  if (!(await projectInSelectedWorkspace(projectId))) return;
 
   const latestClosedPack = await getLatestNextDraftSourcePack(projectId);
 
@@ -128,6 +139,9 @@ export async function updateReportingPack(formData: FormData) {
         ok: false,
         message: "Reporting pack not updated: required identifiers are missing.",
       };
+    }
+    if (!(await projectInSelectedWorkspace(projectId))) {
+      return { ok: false, message: "Reporting pack not updated: project is not in the selected workspace." };
     }
 
     const validation = validateReportingPackInput(input);
@@ -188,6 +202,9 @@ export async function copyPreviousReportingPackNarrative(formData: FormData) {
         message:
           "Narrative not copied: required reporting pack identifiers are missing.",
       };
+    }
+    if (!(await projectInSelectedWorkspace(projectId))) {
+      return { ok: false, message: "Narrative not copied: project is not in the selected workspace." };
     }
 
     const currentPack = await getReportingPackStatus(id);
@@ -266,9 +283,10 @@ export async function submitReportingPackNarrativeForReview(formData: FormData) 
     if (!id || !projectId) {
       return { ok: false, message: "Narrative not submitted: required identifiers are missing." };
     }
+    const selectedWorkspace = await getSelectedWorkspace();
 
     const pack = await prisma.projectReportingPack.findFirst({
-      where: { id, projectId },
+      where: { id, projectId, project: { workspaceId: selectedWorkspace.id } },
       include: { project: { select: { defaultLanguage: true } } },
     });
     if (!pack) return { ok: false, message: "Narrative not submitted: reporting pack was not found." };
@@ -313,11 +331,14 @@ export async function generateReportingPackNarrativeProposals(formData: FormData
     if (!id || !projectId) {
       return { ok: false, message: "Narrative not generated: required identifiers are missing." };
     }
+    const selectedWorkspace = await getSelectedWorkspace();
 
     const [pack, project, previousPack] = await Promise.all([
-      prisma.projectReportingPack.findFirst({ where: { id, projectId } }),
-      prisma.project.findUnique({
-        where: { id: projectId },
+      prisma.projectReportingPack.findFirst({
+        where: { id, projectId, project: { workspaceId: selectedWorkspace.id } },
+      }),
+      prisma.project.findFirst({
+        where: { id: projectId, workspaceId: selectedWorkspace.id },
         include: {
           projectWorkstreams: {
             where: { isActive: true },
@@ -344,6 +365,7 @@ export async function generateReportingPackNarrativeProposals(formData: FormData
       prisma.projectReportingPack.findFirst({
         where: {
           projectId,
+          project: { workspaceId: selectedWorkspace.id },
           id: { not: id },
           status: { in: ["READY", "APPROVED"] },
         },
@@ -448,6 +470,9 @@ export async function reviewNarrativeProposal(formData: FormData) {
   if (!revisionId || !projectId || !["APPROVE", "REJECT", "PUBLISH"].includes(decision)) {
     return { ok: false, message: "Narrative review not recorded: invalid request." };
   }
+  if (!(await projectInSelectedWorkspace(projectId))) {
+    return { ok: false, message: "Narrative review not recorded: project is not in the selected workspace." };
+  }
 
   if (decision === "APPROVE") {
     const pending = await prisma.managedNarrativeRevision.findFirst({
@@ -505,6 +530,9 @@ export async function updateNarrativeProposal(formData: FormData) {
   if (!revisionId || !projectId || !content) {
     return { ok: false, message: "Narrative proposal not saved: content is required." };
   }
+  if (!(await projectInSelectedWorkspace(projectId))) {
+    return { ok: false, message: "Narrative proposal not saved: project is not in the selected workspace." };
+  }
 
   const revision = await prisma.managedNarrativeRevision.findFirst({
     where: { id: revisionId, status: "PROPOSED", narrative: { projectId } },
@@ -535,9 +563,10 @@ export async function archiveReportingPack(formData: FormData) {
   const projectId = String(formData.get("projectId") || "");
 
   if (!id || !projectId) return;
+  if (!(await projectInSelectedWorkspace(projectId))) return;
 
-  await prisma.projectReportingPack.update({
-    where: { id },
+  await prisma.projectReportingPack.updateMany({
+    where: { id, projectId },
     data: {
       status: "ARCHIVED",
       isActive: false,
@@ -552,6 +581,7 @@ export async function deleteDraftReportingPack(formData: FormData) {
   const projectId = String(formData.get("projectId") || "");
 
   if (!id || !projectId) return;
+  if (!(await projectInSelectedWorkspace(projectId))) return;
 
   const currentPack = await getReportingPackStatus(id);
 

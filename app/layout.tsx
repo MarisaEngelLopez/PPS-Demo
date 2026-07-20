@@ -5,6 +5,12 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { getServerLocale } from "@/lib/i18n/server";
 import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
+import { WorkspaceSwitcher } from "@/components/workspace/WorkspaceSwitcher";
+import {
+  getAuthorizationContext,
+  hasRole,
+  isDemoOnlyUser,
+} from "@/lib/authorization";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -43,6 +49,13 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const locale = await getServerLocale();
+  const authorizationContext = await getAuthorizationContext();
+  const isOwnerAdmin = authorizationContext
+    ? hasRole(authorizationContext, "OWNER_ADMIN")
+    : false;
+  const isDemoOnly = authorizationContext
+    ? isDemoOnlyUser(authorizationContext)
+    : false;
 
   return (
     <html
@@ -52,7 +65,11 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
   <Providers initialLocale={locale}>
     <ServiceWorkerRegistration />
-    <MainNav />
+    <MainNav
+      showOwnerNavigation={isOwnerAdmin}
+      showEnvironmentPill={!isDemoOnly}
+    />
+    <WorkspaceSwitcher />
     {children}
   </Providers>
 </body>

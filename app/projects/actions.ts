@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 import { generateNextBusinessCode } from "@/lib/businessCodes/codeGenerator";
 import { applyTemplateToProject } from "@/lib/actions/projectTemplates";
 import { assertProjectManagerContactExists } from "@/lib/domain/projects/projectBridge";
@@ -46,12 +47,21 @@ function revalidateProjectExecution(projectId: string) {
   revalidatePath("/executive-report/export");
 }
 
+async function projectInSelectedWorkspace(projectId: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
+  return prisma.project.findFirst({
+    where: { id: projectId, workspaceId: selectedWorkspace.id },
+    select: { id: true },
+  });
+}
+
 export async function createProject(formData: FormData) {
   const input = parseProjectCreateInput(formData);
 
   try {
     const validationError = validateProjectCreateInput(input);
     if (validationError) return validationError;
+    const selectedWorkspace = await getSelectedWorkspace();
 
     const project = await prisma.$transaction(async (tx) => {
       const projectManagerContactId = await assertProjectManagerContactExists(
@@ -63,6 +73,7 @@ export async function createProject(formData: FormData) {
       return tx.project.create({
         data: {
           projectCode,
+          workspaceId: selectedWorkspace.id,
           name: input.name,
           projectTypeId: input.projectTypeId,
           governedStatusId: input.governedStatusId,
@@ -103,6 +114,8 @@ export async function updateProject(formData: FormData) {
   try {
     const validationError = validateProjectHeaderInput(input);
     if (validationError) return validationError;
+    const project = await projectInSelectedWorkspace(input.id);
+    if (!project) return projectError("Project not updated: it is not in the selected workspace.");
 
     await prisma.$transaction(async (tx) => {
       const projectManagerContactId = await assertProjectManagerContactExists(
@@ -150,9 +163,10 @@ export async function deleteProject(formData: FormData) {
 
   try {
     if (!id) return projectError("Project not deleted: missing project.");
+    const selectedWorkspace = await getSelectedWorkspace();
 
-    const existing = await prisma.project.findUnique({
-      where: { id },
+    const existing = await prisma.project.findFirst({
+      where: { id, workspaceId: selectedWorkspace.id },
       select: {
         id: true,
         governedStatusId: true,
@@ -197,6 +211,10 @@ export async function createProjectWorkstream(formData: FormData) {
   try {
     if (!projectId) {
       return projectExecutionError("Project workstream not added: missing project.");
+    }
+    const project = await projectInSelectedWorkspace(projectId);
+    if (!project) {
+      return projectExecutionError("Project workstream not added: project is not in the selected workspace.");
     }
     if (!input.workstreamId) {
       return projectExecutionError(
@@ -257,6 +275,10 @@ export async function updateProjectWorkstream(formData: FormData) {
     if (!projectId || !projectWorkstreamId) {
       return projectExecutionError("Project workstream not updated: missing record.");
     }
+    const project = await projectInSelectedWorkspace(projectId);
+    if (!project) {
+      return projectExecutionError("Project workstream not updated: project is not in the selected workspace.");
+    }
 
     const dateError = validateProjectWorkstreamDates(input, "Workstream");
     if (dateError) return dateError;
@@ -296,6 +318,10 @@ export async function toggleProjectWorkstream(formData: FormData) {
     if (!projectId || !projectWorkstreamId) {
       return projectExecutionError("Project workstream not updated: missing record.");
     }
+    const project = await projectInSelectedWorkspace(projectId);
+    if (!project) {
+      return projectExecutionError("Project workstream not updated: project is not in the selected workspace.");
+    }
 
     const updated = await prisma.projectWorkstream.update({
       where: { id: projectWorkstreamId },
@@ -321,6 +347,10 @@ export async function deleteProjectWorkstream(formData: FormData) {
     if (!projectId || !projectWorkstreamId) {
       return projectExecutionError("Project workstream not deleted: missing record.");
     }
+    const project = await projectInSelectedWorkspace(projectId);
+    if (!project) {
+      return projectExecutionError("Project workstream not deleted: project is not in the selected workspace.");
+    }
 
     const deleteError = await validateProjectWorkstreamCanDelete(
       prisma,
@@ -345,6 +375,10 @@ export async function createProjectTask(formData: FormData) {
       return projectExecutionError(
         "Task not added: workstream and name are required."
       );
+    }
+    const project = await projectInSelectedWorkspace(projectId);
+    if (!project) {
+      return projectExecutionError("Task not added: project is not in the selected workspace.");
     }
 
     const dateError = validateProjectTaskDates(input);
@@ -397,6 +431,10 @@ export async function createSubtask(formData: FormData) {
         "Subtask not added: workstream, parent task, and name are required."
       );
     }
+    const project = await projectInSelectedWorkspace(projectId);
+    if (!project) {
+      return projectExecutionError("Subtask not added: project is not in the selected workspace.");
+    }
 
     const dateError = validateProjectTaskDates(input);
     if (dateError) return dateError;
@@ -448,6 +486,10 @@ export async function updateProjectTask(formData: FormData) {
     if (!projectId || !taskId || !input.name) {
       return projectExecutionError("Task not updated: task and name are required.");
     }
+    const project = await projectInSelectedWorkspace(projectId);
+    if (!project) {
+      return projectExecutionError("Task not updated: project is not in the selected workspace.");
+    }
 
     const dateError = validateProjectTaskDates(input);
     if (dateError) return dateError;
@@ -485,6 +527,10 @@ export async function deleteProjectTask(formData: FormData) {
     if (!projectId || !taskId) {
       return projectExecutionError("Task not deleted: missing record.");
     }
+    const project = await projectInSelectedWorkspace(projectId);
+    if (!project) {
+      return projectExecutionError("Task not deleted: project is not in the selected workspace.");
+    }
 
     const taskResult = await getProjectTaskForDelete(prisma, taskId);
     if (!taskResult.ok) return taskResult.result;
@@ -509,6 +555,10 @@ export async function createProjectEvent(formData: FormData) {
       return projectExecutionError(
         "Milestone not added: event type and date are required."
       );
+    }
+    const project = await projectInSelectedWorkspace(input.projectId);
+    if (!project) {
+      return projectExecutionError("Milestone not added: project is not in the selected workspace.");
     }
 
     const linkedWorkstreamError = await validateLinkedProjectWorkstream(
@@ -561,6 +611,10 @@ export async function updateProjectEvent(formData: FormData) {
     if (!eventId || !projectId) {
       return projectExecutionError("Milestone not updated: missing record.");
     }
+    const project = await projectInSelectedWorkspace(projectId);
+    if (!project) {
+      return projectExecutionError("Milestone not updated: project is not in the selected workspace.");
+    }
     if (!input.eventDate) {
       return projectExecutionError("Milestone not updated: event date is required.");
     }
@@ -606,6 +660,10 @@ export async function toggleProjectEvent(formData: FormData) {
     if (!eventId || !projectId) {
       return projectExecutionError("Milestone not updated: missing record.");
     }
+    const project = await projectInSelectedWorkspace(projectId);
+    if (!project) {
+      return projectExecutionError("Milestone not updated: project is not in the selected workspace.");
+    }
 
     const updated = await prisma.projectEvent.update({
       where: { id: eventId },
@@ -630,6 +688,10 @@ export async function deleteProjectEvent(formData: FormData) {
   try {
     if (!eventId || !projectId) {
       return projectExecutionError("Milestone not deleted: missing record.");
+    }
+    const project = await projectInSelectedWorkspace(projectId);
+    if (!project) {
+      return projectExecutionError("Milestone not deleted: project is not in the selected workspace.");
     }
 
     await prisma.projectEvent.delete({ where: { id: eventId } });

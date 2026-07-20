@@ -7,6 +7,7 @@ export type AgentActionLogFilter = {
   agentKey?: string | null;
   actionType?: string | null;
   projectId?: string | null;
+  workspaceId?: string | null;
 };
 
 type AgentActionLogWithRelations = Prisma.AgentActionLogGetPayload<{
@@ -69,10 +70,15 @@ export function getAgentActionLogWhere(filter: AgentActionLogFilter) {
   if (filter.agentKey) where.agentKey = filter.agentKey;
   if (filter.actionType) where.actionType = filter.actionType;
 
-  if (filter.projectId) {
+  if (filter.projectId || filter.workspaceId) {
+    const projectWhere: Prisma.ProjectWhereInput = {
+      ...(filter.projectId ? { id: filter.projectId } : {}),
+      ...(filter.workspaceId ? { workspaceId: filter.workspaceId } : {}),
+    };
+
     where.OR = [
-      { instruction: { projectId: filter.projectId } },
-      { workSession: { projectId: filter.projectId } },
+      { instruction: { project: projectWhere } },
+      { workSession: { project: projectWhere } },
     ];
   }
 

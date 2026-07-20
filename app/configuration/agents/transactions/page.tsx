@@ -18,6 +18,7 @@ import {
 import { translate } from "@/lib/i18n/dictionaries";
 import { getServerLocale } from "@/lib/i18n/server";
 import { prisma } from "@/lib/prisma";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 type SearchParams = {
   from?: string;
@@ -42,6 +43,7 @@ export default async function AgentTransactionLogsPage({
   const agentKey = params.agentKey || "";
   const actionType = params.actionType || "";
   const projectId = params.projectId || "";
+  const selectedWorkspace = await getSelectedWorkspace();
 
   const [logs, actionTypes, projects, agents] = await Promise.all([
     prisma.agentActionLog.findMany({
@@ -51,6 +53,7 @@ export default async function AgentTransactionLogsPage({
         agentKey: agentKey || null,
         actionType: actionType || null,
         projectId: projectId || null,
+        workspaceId: selectedWorkspace.id,
       }),
       include: agentActionLogInclude,
       orderBy: { createdAt: "desc" },
@@ -63,6 +66,7 @@ export default async function AgentTransactionLogsPage({
       orderBy: { actionType: "asc" },
     }),
     prisma.project.findMany({
+      where: { workspaceId: selectedWorkspace.id },
       orderBy: [{ projectCode: "asc" }, { name: "asc" }],
     }),
     prisma.agentDefinition.findMany({

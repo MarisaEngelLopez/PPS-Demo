@@ -3,11 +3,13 @@
 import type { AgentSourceType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 import {
   claimAgentSuggestionApplication,
   createAgentActionLog,
   createAgentSuggestion,
   createTextAgentInstruction,
+  findOpenDuplicateAgentSuggestion,
 } from "@/lib/domain/agents/agentServices";
 import { getAgentStatusByCodeForScope } from "@/lib/domain/agents/agentQueries";
 import { parseAgentJson } from "@/lib/domain/agents/agentRules";
@@ -33,9 +35,9 @@ import {
   getPositionReferencedCandidate,
   normalizeNaturalLanguage,
   parseProjectProgressNaturalLanguage,
-  projectReferenceAliases,
   rankNaturalLanguageCandidates,
 } from "@/lib/domain/agents/naturalLanguageInterpreter";
+import { resolveProjectContext } from "@/lib/domain/agents/projectContextResolver";
 import { normalizeProjectVisibility } from "@/lib/domain/projectExecution/projectExecutionRules";
 
 const PROGRESS_PATH = "/projects/progress-assistant";
@@ -123,6 +125,23 @@ function projectIdForPayload(payload: ProgressPayload) {
   return payload.projectId || null;
 }
 
+async function progressSuggestionInSelectedWorkspace(suggestion: {
+  instruction?: { projectId: string | null } | null;
+  payloadJson: string | null;
+}) {
+  const selectedWorkspace = await getSelectedWorkspace();
+  const payload = parseAgentJson<ProgressPayload>(suggestion.payloadJson, {});
+  const projectId = projectIdForPayload(payload) ?? suggestion.instruction?.projectId ?? null;
+  if (!projectId) return false;
+
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, workspaceId: selectedWorkspace.id },
+    select: { id: true },
+  });
+
+  return Boolean(project);
+}
+
 async function createProgressSuggestion(input: {
   capabilityKey: AgentCapabilityKey;
   projectId: string;
@@ -147,6 +166,19 @@ async function createProgressSuggestion(input: {
 
   const user = await getOneUserAgentUser();
   const capability = getProjectProgressCapability(config, input.capabilityKey);
+  const duplicateSuggestion = await findOpenDuplicateAgentSuggestion(prisma, {
+    agentKey: PROJECT_PROGRESS_AGENT_KEY,
+    projectId: input.projectId,
+    targetEntity: input.targetEntity,
+    targetRecordId: input.targetRecordId ?? null,
+    command: input.payload.command ?? input.capabilityKey,
+  });
+
+  if (duplicateSuggestion) {
+    return progressAgentError(
+      `An open suggestion already exists for this ${input.targetEntity.toLowerCase().replaceAll("_", " ")}. Review the existing suggestion before creating another one.`
+    );
+  }
 
   await prisma.$transaction(async (tx) => {
     const instruction = await createTextAgentInstruction(tx, {
@@ -444,13 +476,14 @@ export async function interpretProjectProgressInstruction(formData: FormData) {
   const visibility = command.includes("VISIBILITY") ? parsedInstruction.visibility : null;
   const phaseReference = extractPhaseReference(rawInstruction);
 
+  const selectedWorkspace = await getSelectedWorkspace();
   const [projects, projectWorkstreams, projectEvents] = await Promise.all([
     prisma.project.findMany({
-      where: { isActive: true },
+      where: { isActive: true, workspaceId: selectedWorkspace.id },
       orderBy: [{ projectCode: "asc" }, { name: "asc" }],
     }),
     prisma.projectWorkstream.findMany({
-      where: { isActive: true },
+      where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
       include: { project: true, workstream: { include: { phase: true } } },
       orderBy: [
         { project: { projectCode: "asc" } },
@@ -459,31 +492,47 @@ export async function interpretProjectProgressInstruction(formData: FormData) {
       ],
     }),
     prisma.projectEvent.findMany({
-      where: { isActive: true },
+      where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
       include: { project: true },
       orderBy: [{ project: { projectCode: "asc" } }, { eventDate: "asc" }],
     }),
   ]);
 
-  const projectCandidates = rankNaturalLanguageCandidates(
+  const projectContext = resolveProjectContext({
     rawInstruction,
-    projects.map((project) => ({
-      id: project.id,
-      label: projectLabel(project),
-      aliases: projectReferenceAliases(project),
-    }))
+    selectedProjectId,
+    projects,
+    label: projectLabel,
+  });
+  const effectiveProjectId = projectContext.projectId;
+  if (!effectiveProjectId) {
+    return {
+      ok: false,
+      message: "I could not identify the project.",
+      interpretation: {
+        command,
+        targetType,
+        confidence: "LOW" as const,
+        rawInstruction,
+        understoodText: "",
+        date,
+        visibility,
+        clarification:
+          "Please say the project name or select a project before using voice input.",
+        candidates: {
+          projects: projectContext.candidates,
+          workstreams: [],
+          events: [],
+        },
+      },
+    };
+  }
+  const projectScopedWorkstreams = projectWorkstreams.filter(
+    (workstream) => workstream.projectId === effectiveProjectId
   );
-  const spokenProjectId = projectCandidates[0]?.score >= 4 ? projectCandidates[0].id : null;
-  const defaultProjectId = projects.some((project) => project.id === selectedProjectId)
-    ? selectedProjectId
-    : null;
-  const effectiveProjectId = spokenProjectId ?? defaultProjectId;
-  const projectScopedWorkstreams = effectiveProjectId
-    ? projectWorkstreams.filter((workstream) => workstream.projectId === effectiveProjectId)
-    : projectWorkstreams;
-  const projectScopedEvents = effectiveProjectId
-    ? projectEvents.filter((event) => event.projectId === effectiveProjectId)
-    : projectEvents;
+  const projectScopedEvents = projectEvents.filter(
+    (event) => event.projectId === effectiveProjectId
+  );
 
   const phaseFilteredWorkstreamPool = phaseReference
     ? projectScopedWorkstreams.filter((workstream) =>
@@ -721,6 +770,7 @@ function formatAccomplishmentsForReport(accomplishments: AccomplishmentsPayload)
 export async function createAccomplishmentsSuggestion(formData: FormData) {
   const projectId = asString(formData.get("projectId"));
   if (!projectId) return progressAgentError("Project is required.");
+  const selectedWorkspace = await getSelectedWorkspace();
 
   const config = await getProjectProgressAgentConfig();
   const enabledError = assertProjectProgressAgentEnabled(config);
@@ -732,9 +782,15 @@ export async function createAccomplishmentsSuggestion(formData: FormData) {
   if (capabilityError) return capabilityError;
 
   const [project, lastApprovedReport] = await Promise.all([
-    prisma.project.findUnique({ where: { id: projectId } }),
+    prisma.project.findFirst({
+      where: { id: projectId, workspaceId: selectedWorkspace.id },
+    }),
     prisma.projectReportingPack.findFirst({
-      where: { projectId, status: "APPROVED" },
+      where: {
+        projectId,
+        status: "APPROVED",
+        project: { workspaceId: selectedWorkspace.id },
+      },
       orderBy: [{ reportingDate: "desc" }, { version: "desc" }],
     }),
   ]);
@@ -749,7 +805,12 @@ export async function createAccomplishmentsSuggestion(formData: FormData) {
 
   const [workstreams, events, risks, riskActions, decisions] = await Promise.all([
     prisma.projectWorkstream.findMany({
-      where: { projectId, isActive: true, actualEndDate: { gte: sinceDate } },
+      where: {
+        projectId,
+        isActive: true,
+        actualEndDate: { gte: sinceDate },
+        project: { workspaceId: selectedWorkspace.id },
+      },
       include: { workstream: { include: { phase: true } } },
       orderBy: [
         { actualEndDate: "asc" },
@@ -763,6 +824,7 @@ export async function createAccomplishmentsSuggestion(formData: FormData) {
         isActive: true,
         isCompleted: true,
         completionDate: { gte: sinceDate },
+        project: { workspaceId: selectedWorkspace.id },
       },
       orderBy: [{ completionDate: "asc" }, { eventDate: "asc" }],
     }),
@@ -772,6 +834,7 @@ export async function createAccomplishmentsSuggestion(formData: FormData) {
         isActive: true,
         updatedAt: { gte: sinceDate },
         status: { code: { in: closedStatusCodes } },
+        project: { workspaceId: selectedWorkspace.id },
       },
       include: { status: true },
       orderBy: [{ updatedAt: "asc" }, { title: "asc" }],
@@ -780,7 +843,7 @@ export async function createAccomplishmentsSuggestion(formData: FormData) {
       where: {
         updatedAt: { gte: sinceDate },
         statusRef: { code: { in: closedStatusCodes } },
-        projectRisk: { projectId },
+        projectRisk: { projectId, project: { workspaceId: selectedWorkspace.id } },
       },
       include: { projectRisk: true, statusRef: true },
       orderBy: [{ updatedAt: "asc" }, { description: "asc" }],
@@ -791,6 +854,7 @@ export async function createAccomplishmentsSuggestion(formData: FormData) {
         isActive: true,
         updatedAt: { gte: sinceDate },
         statusRef: { code: { in: closedStatusCodes } },
+        project: { workspaceId: selectedWorkspace.id },
       },
       include: { statusRef: true },
       orderBy: [{ updatedAt: "asc" }, { title: "asc" }],
@@ -881,12 +945,16 @@ export async function createAccomplishmentsSuggestion(formData: FormData) {
 export async function approveProjectProgressSuggestion(formData: FormData) {
   const id = asString(formData.get("id"));
   if (!id) return progressAgentError("Suggestion not approved: missing id.");
+  const selectedWorkspace = await getSelectedWorkspace();
 
   const suggestion = await prisma.agentSuggestion.findUnique({
     where: { id },
     include: { instruction: true },
   });
   if (!suggestion) return progressAgentError("Suggestion no longer exists.");
+  if (!(await progressSuggestionInSelectedWorkspace(suggestion))) {
+    return progressAgentError("Suggestion not approved: it is not in the selected workspace.");
+  }
   if (suggestion.appliedAt) return progressAgentError("Suggestion already applied.");
 
   const payload = parseAgentJson<ProgressPayload>(suggestion.payloadJson, {});
@@ -936,6 +1004,15 @@ export async function approveProjectProgressSuggestion(formData: FormData) {
   }
 
   const approvalProjectId = projectIdForPayload(approvalPayload);
+  if (approvalProjectId) {
+    const project = await prisma.project.findFirst({
+      where: { id: approvalProjectId, workspaceId: selectedWorkspace.id },
+      select: { id: true },
+    });
+    if (!project) {
+      return progressAgentError("Suggestion not approved: project is not in the selected workspace.");
+    }
+  }
 
   if (
     approvalProjectId &&
@@ -951,6 +1028,7 @@ export async function approveProjectProgressSuggestion(formData: FormData) {
       where: {
         id: approvalPayload.targetRecordId,
         projectId: approvalProjectId,
+        project: { workspaceId: selectedWorkspace.id },
       },
       select: { id: true },
     });
@@ -968,6 +1046,7 @@ export async function approveProjectProgressSuggestion(formData: FormData) {
       where: {
         id: approvalPayload.targetRecordId,
         projectId: approvalProjectId,
+        project: { workspaceId: selectedWorkspace.id },
       },
       select: { id: true },
     });
@@ -987,7 +1066,12 @@ export async function approveProjectProgressSuggestion(formData: FormData) {
   const draftReportingPack =
     approvalPayload.command === "GENERATE_ACCOMPLISHMENTS_SINCE_REPORT" && projectId
       ? await prisma.projectReportingPack.findMany({
-          where: { projectId, status: "DRAFT", isActive: true },
+          where: {
+            projectId,
+            status: "DRAFT",
+            isActive: true,
+            project: { workspaceId: selectedWorkspace.id },
+          },
           orderBy: [{ version: "desc" }, { createdAt: "desc" }],
           take: 2,
         })
@@ -1128,6 +1212,9 @@ export async function rejectProjectProgressSuggestion(formData: FormData) {
     include: { instruction: true },
   });
   if (!suggestion) return progressAgentError("Suggestion no longer exists.");
+  if (!(await progressSuggestionInSelectedWorkspace(suggestion))) {
+    return progressAgentError("Suggestion not rejected: it is not in the selected workspace.");
+  }
 
   const [approvalStatus, suggestionStatus] = await Promise.all([
     getAgentStatusByCodeForScope(prisma, "AGENT_APPROVAL", "REJECTED"),

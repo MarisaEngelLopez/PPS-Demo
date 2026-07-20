@@ -15,6 +15,7 @@ export default async function ProjectsPage() {
   openProjectStatusIds,
   organizations,
   templates,
+  selectedWorkspace,
 } = await getProjectPortfolioPageData();
 
 
@@ -23,6 +24,9 @@ export default async function ProjectsPage() {
 
 
       <h1 style={h1Style}>{translate(locale, "nav.projects")}</h1>
+      <p style={{ color: "#64748b", fontSize: "0.9rem", marginTop: "-0.5rem" }}>
+        Workspace: {selectedWorkspace.code} - {selectedWorkspace.name}
+      </p>
 
       <div style={{ marginBottom: 24 }}>
         <AdminCardGrid>

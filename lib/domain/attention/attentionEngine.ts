@@ -3,6 +3,7 @@ import {
   deriveRiskLifecycleSummary,
   type RiskLifecycleConfig,
 } from "@/lib/domain/risks/riskLifecycle";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 export type AttentionCategory =
   | "Workstream"
@@ -199,6 +200,7 @@ function itemSortValue(item: AttentionItem) {
 }
 
 export async function getDailyAttentionItems(now = new Date()): Promise<AttentionItem[]> {
+  const selectedWorkspace = await getSelectedWorkspace();
   const today = startOfLocalDay(now);
   const agentSuggestionCutoff = new Date(
     now.getTime() - AGENT_SUGGESTION_OVERDUE_HOURS * 60 * 60 * 1000
@@ -215,18 +217,18 @@ export async function getDailyAttentionItems(now = new Date()): Promise<Attentio
   ] =
     await Promise.all([
       prisma.projectWorkstream.findMany({
-        where: { isActive: true },
+        where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
         include: {
           project: true,
           workstream: { include: { phase: true } },
         },
       }),
       prisma.projectEvent.findMany({
-        where: { isActive: true },
+        where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
         include: { project: true },
       }),
       prisma.projectRisk.findMany({
-        where: { isActive: true },
+        where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
         include: {
           project: true,
           status: true,
@@ -245,6 +247,7 @@ export async function getDailyAttentionItems(now = new Date()): Promise<Attentio
         },
       }),
       prisma.projectRiskAction.findMany({
+        where: { projectRisk: { project: { workspaceId: selectedWorkspace.id } } },
         include: {
           owner: true,
           statusRef: true,
@@ -252,14 +255,14 @@ export async function getDailyAttentionItems(now = new Date()): Promise<Attentio
         },
       }),
       prisma.projectDecision.findMany({
-        where: { isActive: true },
+        where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
         include: {
           project: true,
           statusRef: true,
         },
       }),
       prisma.project.findMany({
-        where: { isActive: true },
+        where: { isActive: true, workspaceId: selectedWorkspace.id },
         include: {
           governedStatus: true,
           projectManagerContact: true,
@@ -273,6 +276,7 @@ export async function getDailyAttentionItems(now = new Date()): Promise<Attentio
       prisma.workSession.findMany({
         where: {
           convertedTimeEntryId: null,
+          project: { workspaceId: selectedWorkspace.id },
           status: { code: { in: ["IN_PROGRESS", "ON_HOLD"] } },
         },
         include: {
@@ -290,6 +294,7 @@ export async function getDailyAttentionItems(now = new Date()): Promise<Attentio
           appliedAt: null,
           createdAt: { lte: agentSuggestionCutoff },
           status: { code: "OPEN" },
+          instruction: { project: { workspaceId: selectedWorkspace.id } },
         },
         include: {
           instruction: { include: { project: true } },

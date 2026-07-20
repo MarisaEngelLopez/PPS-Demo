@@ -102,6 +102,11 @@ export function VoiceInputControl({
       return;
     }
 
+    if (!window.isSecureContext) {
+      setVoiceStatus(t("timeTracking.voiceRequiresSecureContext"));
+      return;
+    }
+
     const speechWindow = window as typeof window & {
       SpeechRecognition?: SpeechRecognitionConstructor;
       webkitSpeechRecognition?: SpeechRecognitionConstructor;
@@ -175,7 +180,18 @@ export function VoiceInputControl({
     recognitionRef.current = recognition;
     setVoiceStatus(t("timeTracking.voiceListening"));
     setIsListening(true);
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (error) {
+      recognitionRef.current = null;
+      setIsListening(false);
+      setVoiceStatus(
+        t("timeTracking.voiceError").replace(
+          "{error}",
+          error instanceof Error ? error.message : "start failed"
+        )
+      );
+    }
   }
 
   return (

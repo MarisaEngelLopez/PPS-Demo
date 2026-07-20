@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { getProjectStatusOptions } from "@/lib/status/statusQueries";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
-export async function getProjectOrganizations() {
+export async function getProjectOrganizations(workspaceId?: string) {
   return prisma.organization.findMany({
-    where: { isActive: true },
+    where: { isActive: true, workspaceId },
     include: {
       contacts: {
         where: { isActive: true },
@@ -15,6 +16,7 @@ export async function getProjectOrganizations() {
 }
 
 export async function getProjectPortfolioPageData() {
+  const selectedWorkspace = await getSelectedWorkspace();
   const [
     projects,
     projectTypes,
@@ -23,7 +25,7 @@ export async function getProjectPortfolioPageData() {
     templates,
   ] = await Promise.all([
     prisma.project.findMany({
-      where: { isActive: true },
+      where: { isActive: true, workspaceId: selectedWorkspace.id },
       include: {
         projectType: true,
         governedStatus: true,
@@ -36,7 +38,7 @@ export async function getProjectPortfolioPageData() {
       orderBy: { name: "asc" },
     }),
     getProjectStatusOptions(),
-    getProjectOrganizations(),
+    getProjectOrganizations(selectedWorkspace.id),
     prisma.projectTemplate.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
@@ -45,6 +47,7 @@ export async function getProjectPortfolioPageData() {
 
   return {
     projects,
+    selectedWorkspace,
     projectTypes,
     projectStatusOptions: projectStatusUsageOptions.map((option) => ({
       id: option.status.id,
@@ -61,6 +64,7 @@ export async function getProjectPortfolioPageData() {
 }
 
 export async function getProjectDetailPageData(projectId: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
   const [
     projectStatusOptions,
     organizations,
@@ -71,9 +75,9 @@ export async function getProjectDetailPageData(projectId: string) {
     eventTypes,
   ] = await Promise.all([
     getProjectStatusOptions(),
-    getProjectOrganizations(),
-    prisma.project.findUnique({
-      where: { id: projectId },
+    getProjectOrganizations(selectedWorkspace.id),
+    prisma.project.findFirst({
+      where: { id: projectId, workspaceId: selectedWorkspace.id },
       include: {
         projectType: true,
         governedStatus: true,
@@ -160,6 +164,7 @@ export async function getProjectDetailPageData(projectId: string) {
 
   return {
     projectStatusOptions,
+    selectedWorkspace,
     organizations,
     project,
     projectWorkstreams,

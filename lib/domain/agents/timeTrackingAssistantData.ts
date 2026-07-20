@@ -1,6 +1,7 @@
 import { parseAgentJson } from "@/lib/domain/agents/agentRules";
 import { TIME_TRACKING_AGENT_KEY } from "@/lib/domain/agents/timeTrackingAgent";
 import { prisma } from "@/lib/prisma";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 type SuggestionPayload = {
   projectId?: string;
@@ -28,10 +29,11 @@ function getRecentCutoffDate() {
 
 export async function getTimeTrackingBasePageData() {
   const recentCutoff = getRecentCutoffDate();
+  const selectedWorkspace = await getSelectedWorkspace();
   const [projects, taskFamilies, projectWorkstreams, timeEntries] =
     await Promise.all([
       prisma.project.findMany({
-        where: { isActive: true },
+        where: { isActive: true, workspaceId: selectedWorkspace.id },
         orderBy: { name: "asc" },
       }),
       prisma.taskFamily.findMany({
@@ -39,6 +41,7 @@ export async function getTimeTrackingBasePageData() {
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       }),
       prisma.projectWorkstream.findMany({
+        where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
         include: {
           project: true,
           workstream: {
@@ -74,6 +77,7 @@ export async function getTimeTrackingBasePageData() {
         ],
       }),
       prisma.timeEntry.findMany({
+        where: { project: { workspaceId: selectedWorkspace.id } },
         include: {
           project: true,
           taskFamily: true,
@@ -149,6 +153,7 @@ export async function getTimeTrackingBasePageData() {
 
   return {
     projects,
+    selectedWorkspace,
     projectWorkstreams: sortedProjectWorkstreams,
     taskFamilies,
     timeEntries,
@@ -160,12 +165,13 @@ export async function getTimeTrackingBasePageData() {
 
 export async function getTimeTrackingAssistantPageData() {
   const baseData = await getTimeTrackingBasePageData();
-  const { projects, projectWorkstreams, taskFamilies } = baseData;
+  const { projects, projectWorkstreams, taskFamilies, selectedWorkspace } = baseData;
 
   const [workSessions, openSuggestions, instructionTemplates, voiceSource] =
     await Promise.all([
       prisma.workSession.findMany({
         where: {
+          project: { workspaceId: selectedWorkspace.id },
           convertedTimeEntryId: null,
           status: {
             code: { in: ["IN_PROGRESS", "ON_HOLD"] },
@@ -203,6 +209,9 @@ export async function getTimeTrackingAssistantPageData() {
             code: "OPEN",
           },
           suggestionType: "CREATE_TIME_ENTRY",
+          instruction: {
+            project: { workspaceId: selectedWorkspace.id },
+          },
         },
         include: {
           status: true,

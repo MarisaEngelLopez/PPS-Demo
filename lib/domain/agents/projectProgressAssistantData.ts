@@ -1,6 +1,7 @@
 import { parseAgentJson } from "@/lib/domain/agents/agentRules";
 import { PROJECT_PROGRESS_AGENT_KEY } from "@/lib/domain/agents/projectProgressAgent";
 import { prisma } from "@/lib/prisma";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 type VisibilityItem = {
   targetEntity: string;
@@ -55,14 +56,15 @@ function formatEventLabel(event: {
 }
 
 export async function getProjectProgressAssistantPageData() {
+  const selectedWorkspace = await getSelectedWorkspace();
   const [projects, projectWorkstreams, projectEvents, suggestions, voiceSource] =
     await Promise.all([
       prisma.project.findMany({
-        where: { isActive: true },
+        where: { isActive: true, workspaceId: selectedWorkspace.id },
         orderBy: [{ projectCode: "asc" }, { name: "asc" }],
       }),
       prisma.projectWorkstream.findMany({
-        where: { isActive: true },
+        where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
         include: { project: true, workstream: { include: { phase: true } } },
         orderBy: [
           { project: { projectCode: "asc" } },
@@ -71,7 +73,7 @@ export async function getProjectProgressAssistantPageData() {
         ],
       }),
       prisma.projectEvent.findMany({
-        where: { isActive: true },
+        where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
         include: { project: true },
         orderBy: [{ project: { projectCode: "asc" } }, { eventDate: "asc" }],
       }),
@@ -80,6 +82,9 @@ export async function getProjectProgressAssistantPageData() {
           agentKey: PROJECT_PROGRESS_AGENT_KEY,
           appliedAt: null,
           status: { code: "OPEN" },
+          instruction: {
+            project: { workspaceId: selectedWorkspace.id },
+          },
         },
         orderBy: [{ createdAt: "desc" }],
         take: 20,

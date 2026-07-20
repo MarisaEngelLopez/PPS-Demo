@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getDecisionStatusOptions } from "@/lib/status/statusQueries";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 import type { Prisma, PrismaClient, Status } from "@prisma/client";
 import { getDecisionStatusCode } from "./decisionRules";
 import type {
@@ -146,13 +147,14 @@ export async function resolveDecisionStatusForInput(
 }
 
 export async function getDecisionPageData(filters: DecisionFilters) {
+  const selectedWorkspace = await getSelectedWorkspace();
   const [projects, projectWorkstreams, decisionStatusOptions] = await Promise.all([
     prisma.project.findMany({
-      where: { isActive: true },
+      where: { isActive: true, workspaceId: selectedWorkspace.id },
       orderBy: [{ projectCode: "asc" }],
     }),
     prisma.projectWorkstream.findMany({
-      where: { isActive: true },
+      where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
       include: {
         project: true,
         workstream: {
@@ -197,6 +199,7 @@ export async function getDecisionPageData(filters: DecisionFilters) {
 
   const where: Prisma.ProjectDecisionWhereInput = {
     isActive: true,
+    project: { workspaceId: selectedWorkspace.id },
   };
 
   if (filters.projectId) where.projectId = filters.projectId;

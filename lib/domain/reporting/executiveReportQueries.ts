@@ -1,13 +1,16 @@
 import { prisma } from "@/lib/prisma";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 import {
   executiveReportProjectInclude,
   type ExecutiveReportProject,
   type ExecutiveReportProjectOption,
 } from "@/lib/domain/reporting/executiveReportTypes";
 
-export function getExecutiveReportProjectOptions() {
+export async function getExecutiveReportProjectOptions() {
+  const selectedWorkspace = await getSelectedWorkspace();
+
   return prisma.project.findMany({
-    where: { isActive: true },
+    where: { isActive: true, workspaceId: selectedWorkspace.id },
     orderBy: [{ projectCode: "asc" }],
     select: {
       id: true,
@@ -17,9 +20,11 @@ export function getExecutiveReportProjectOptions() {
   });
 }
 
-export function getExecutiveReportProject(projectId: string) {
-  return prisma.project.findUnique({
-    where: { id: projectId },
+export async function getExecutiveReportProject(projectId: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
+
+  return prisma.project.findFirst({
+    where: { id: projectId, workspaceId: selectedWorkspace.id },
     include: executiveReportProjectInclude,
   });
 }

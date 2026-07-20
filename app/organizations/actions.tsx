@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 export type OrganizationActionResult = {
   ok: boolean;
@@ -25,14 +26,36 @@ function boolFromForm(value: FormDataEntryValue | null) {
   return String(value || "") === "true";
 }
 
+async function organizationInSelectedWorkspace(id: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
+  return prisma.organization.findFirst({
+    where: { id, workspaceId: selectedWorkspace.id },
+    select: { id: true },
+  });
+}
+
+async function contactInSelectedWorkspace(id: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
+  return prisma.organizationContact.findFirst({
+    where: {
+      id,
+      organization: { workspaceId: selectedWorkspace.id },
+    },
+    select: { id: true },
+  });
+}
+
 export async function createOrganization(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
 
   if (!name) return error("Organization not created: name is required.");
 
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
+
     await prisma.organization.create({
       data: {
+        workspaceId: selectedWorkspace.id,
         code: textOrNull(formData.get("code")),
         name,
         legalName: textOrNull(formData.get("legalName")),
@@ -63,6 +86,11 @@ export async function updateOrganization(formData: FormData) {
   if (!id || !name) return error("Organization not updated: missing id or name.");
 
   try {
+    const organization = await organizationInSelectedWorkspace(id);
+    if (!organization) {
+      return error("Organization not updated: it is not in the selected workspace.");
+    }
+
     await prisma.organization.update({
       where: { id },
       data: {
@@ -95,8 +123,9 @@ export async function deleteOrganization(formData: FormData) {
   if (!id) return error("Organization not deleted: missing id.");
 
   try {
-    const organization = await prisma.organization.findUnique({
-      where: { id },
+    const selectedWorkspace = await getSelectedWorkspace();
+    const organization = await prisma.organization.findFirst({
+      where: { id, workspaceId: selectedWorkspace.id },
       include: {
         _count: {
           select: {
@@ -140,6 +169,11 @@ export async function createOrganizationContact(formData: FormData) {
   if (!organizationId || !name) return error("Contact not created: organization and name are required.");
 
   try {
+    const organization = await organizationInSelectedWorkspace(organizationId);
+    if (!organization) {
+      return error("Contact not created: organization is not in the selected workspace.");
+    }
+
     await prisma.organizationContact.create({
       data: {
         organizationId,
@@ -169,6 +203,11 @@ export async function updateOrganizationContact(formData: FormData) {
   if (!id || !name) return error("Contact not updated: missing id or name.");
 
   try {
+    const contact = await contactInSelectedWorkspace(id);
+    if (!contact) {
+      return error("Contact not updated: it is not in the selected workspace.");
+    }
+
     await prisma.organizationContact.update({
       where: { id },
       data: {
@@ -197,8 +236,12 @@ export async function deleteOrganizationContact(formData: FormData) {
   if (!id) return error("Contact not deleted: missing id.");
 
   try {
-    const contact = await prisma.organizationContact.findUnique({
-      where: { id },
+    const selectedWorkspace = await getSelectedWorkspace();
+    const contact = await prisma.organizationContact.findFirst({
+      where: {
+        id,
+        organization: { workspaceId: selectedWorkspace.id },
+      },
       include: {
         _count: {
           select: {

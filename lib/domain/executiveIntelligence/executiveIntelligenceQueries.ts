@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/prisma";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 export async function getExecutiveIntelligencePageData() {
+  const selectedWorkspace = await getSelectedWorkspace();
   const [items, organizations, contacts, users] = await Promise.all([
     prisma.executiveIntelligence.findMany({
+      where: { organization: { workspaceId: selectedWorkspace.id } },
       include: {
         organization: true,
         contact: { include: { organization: true } },
@@ -15,11 +18,11 @@ export async function getExecutiveIntelligencePageData() {
       ],
     }),
     prisma.organization.findMany({
-      where: { isActive: true },
+      where: { isActive: true, workspaceId: selectedWorkspace.id },
       orderBy: [{ organizationType: "asc" }, { name: "asc" }],
     }),
     prisma.organizationContact.findMany({
-      where: { isActive: true },
+      where: { isActive: true, organization: { workspaceId: selectedWorkspace.id } },
       include: { organization: true },
       orderBy: [{ organization: { name: "asc" } }, { name: "asc" }],
     }),

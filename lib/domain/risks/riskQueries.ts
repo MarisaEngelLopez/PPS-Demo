@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 import {
   getRiskActionStatusOptions,
   getRiskStatusOptions,
@@ -133,6 +134,7 @@ export async function resolveStatusForScopeInput(
 }
 
 export async function getRiskPageData(filters: RiskFilters) {
+  const selectedWorkspace = await getSelectedWorkspace();
   const [
     projects,
     riskFilterProjects,
@@ -147,14 +149,15 @@ export async function getRiskPageData(filters: RiskFilters) {
     users,
   ] = await Promise.all([
     prisma.project.findMany({
-      where: { isActive: true },
+      where: { isActive: true, workspaceId: selectedWorkspace.id },
       orderBy: { name: "asc" },
     }),
     prisma.project.findMany({
+      where: { workspaceId: selectedWorkspace.id },
       orderBy: [{ projectCode: "asc" }, { name: "asc" }],
     }),
     prisma.projectWorkstream.findMany({
-      where: { isActive: true },
+      where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
       include: {
         project: true,
         workstream: { include: { phase: true } },
@@ -184,7 +187,7 @@ export async function getRiskPageData(filters: RiskFilters) {
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
     prisma.projectDecision.findMany({
-      where: { isActive: true },
+      where: { isActive: true, project: { workspaceId: selectedWorkspace.id } },
       include: { statusRef: true },
       orderBy: [{ project: { projectCode: "asc" } }, { decisionCode: "asc" }],
     }),
@@ -218,7 +221,9 @@ export async function getRiskPageData(filters: RiskFilters) {
     .filter((option) => option.usage.isNegative)
     .map((option) => option.status.code);
 
-  const where: Prisma.ProjectRiskWhereInput = {};
+  const where: Prisma.ProjectRiskWhereInput = {
+    project: { workspaceId: selectedWorkspace.id },
+  };
 
   if (filters.projectId) where.projectId = filters.projectId;
   if (filters.categoryId) where.categoryId = filters.categoryId;

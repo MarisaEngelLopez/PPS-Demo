@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useActionToast } from "@/components/ui/useActionToast";
 import { buttonStyle, sectionPanelStyle } from "@/components/ui/layoutStyles";
@@ -106,7 +106,9 @@ export function NarrativeLifecyclePanel({
               revision.sourceReportingPackId === reportingPackId
           );
           const approved = narrative.revisions.find((revision) => revision.status === "APPROVED");
-          const evidenceCount = getEvidenceCount(proposal?.evidenceJson);
+          const evidenceCount = getEvidenceCount(
+            (proposal ?? approved)?.evidenceJson
+          );
           const budget =
             variant === "SHORT" && proposal
               ? getBriefingContentBudget(
@@ -142,14 +144,14 @@ export function NarrativeLifecyclePanel({
               </div>
               <div style={{ display: "flex", gap: "0.3rem", minWidth: "138px" }}>
                 {proposal && (
-                  <>
+                  <Fragment key={`proposal-actions-${proposal.id}`}>
                     <button type="button" disabled={budget ? !budget.fits : false} title={budget && !budget.fits ? "Short narrative exceeds the one-page briefing budget." : undefined} onClick={() => review(proposal.id, "APPROVE")} style={{ ...buttonStyle, padding: "0.3rem 0.55rem", opacity: budget && !budget.fits ? 0.5 : 1 }}>
                       Approve
                     </button>
                     <button type="button" onClick={() => review(proposal.id, "REJECT")} style={{ ...buttonStyle, padding: "0.3rem 0.55rem", background: "#fff", color: "#475569", border: "1px solid #cbd5e1" }}>
                       Reject
                     </button>
-                  </>
+                  </Fragment>
                 )}
                 {!proposal && approved && !approved.publishedAt && (
                   <button type="button" onClick={() => review(approved.id, "PUBLISH")} style={{ ...buttonStyle, padding: "0.3rem 0.55rem", background: "#0f766e" }}>
@@ -186,6 +188,11 @@ export function NarrativeLifecyclePanel({
                     </div>
                   </div>
                 </details>
+              )}
+              {!proposal && approved && evidenceCount > 0 && (
+                <div style={{ gridColumn: "1 / -1", color: "#475569", fontSize: "0.72rem" }}>
+                  Approved narrative evidence: {evidenceCount} linked project records
+                </div>
               )}
             </div>
           );

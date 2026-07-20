@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { generateNextBusinessCode } from "@/lib/businessCodes/codeGenerator";
 import { translate } from "@/lib/i18n/dictionaries";
 import { getServerLocale } from "@/lib/i18n/server";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 async function getNextCodes() {
   return prisma.$transaction(async (tx) => ({
@@ -17,11 +18,13 @@ async function getNextCodes() {
 
 async function purgeInactiveGeneratedProjects() {
   "use server";
+  const selectedWorkspace = await getSelectedWorkspace();
 
   const projects = await prisma.project.findMany({
     where: {
       isActive: false,
       projectCode: { startsWith: "PR_" },
+      workspaceId: selectedWorkspace.id,
     },
     select: { id: true, projectCode: true },
   });
@@ -72,11 +75,13 @@ async function purgeInactiveGeneratedProjects() {
 
 async function purgeGeneratedRisks() {
   "use server";
+  const selectedWorkspace = await getSelectedWorkspace();
 
   const risks = await prisma.projectRisk.findMany({
     where: {
       isActive: false,
       riskCode: { startsWith: "RI_" },
+      project: { workspaceId: selectedWorkspace.id },
     },
     select: { id: true },
   });
@@ -92,6 +97,7 @@ async function purgeGeneratedRisks() {
       where: {
         isActive: false,
         riskCode: { startsWith: "RI_" },
+        project: { workspaceId: selectedWorkspace.id },
       },
     });
   });
@@ -104,11 +110,15 @@ async function purgeGeneratedRisks() {
 
 async function purgeGeneratedRiskActions() {
   "use server";
+  const selectedWorkspace = await getSelectedWorkspace();
 
   await prisma.projectRiskAction.deleteMany({
     where: {
       actionCode: { startsWith: "RA_" },
-      projectRisk: { isActive: false },
+      projectRisk: {
+        isActive: false,
+        project: { workspaceId: selectedWorkspace.id },
+      },
     },
   });
 
@@ -120,11 +130,13 @@ async function purgeGeneratedRiskActions() {
 
 async function purgeGeneratedDecisions() {
   "use server";
+  const selectedWorkspace = await getSelectedWorkspace();
 
   await prisma.projectDecision.deleteMany({
     where: {
       isActive: false,
       decisionCode: { startsWith: "DE_" },
+      project: { workspaceId: selectedWorkspace.id },
     },
   });
 
@@ -137,36 +149,52 @@ async function purgeGeneratedDecisions() {
 export default async function BusinessCodesConfigurationPage() {
   const locale = await getServerLocale();
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key);
+  const selectedWorkspace = await getSelectedWorkspace();
   const [nextCodes, projectCounts, riskCount, riskActionCount, decisionCount] =
     await Promise.all([
       getNextCodes(),
       prisma.project.groupBy({
         by: ["isActive"],
-        where: { projectCode: { startsWith: "PR_" } },
+        where: {
+          projectCode: { startsWith: "PR_" },
+          workspaceId: selectedWorkspace.id,
+        },
         _count: { _all: true },
       }),
       prisma.projectRisk.groupBy({
         by: ["isActive"],
-        where: { riskCode: { startsWith: "RI_" } },
+        where: {
+          riskCode: { startsWith: "RI_" },
+          project: { workspaceId: selectedWorkspace.id },
+        },
         _count: { _all: true },
       }),
       Promise.all([
         prisma.projectRiskAction.count({
           where: {
             actionCode: { startsWith: "RA_" },
-            projectRisk: { isActive: true },
+            projectRisk: {
+              isActive: true,
+              project: { workspaceId: selectedWorkspace.id },
+            },
           },
         }),
         prisma.projectRiskAction.count({
           where: {
             actionCode: { startsWith: "RA_" },
-            projectRisk: { isActive: false },
+            projectRisk: {
+              isActive: false,
+              project: { workspaceId: selectedWorkspace.id },
+            },
           },
         }),
       ]),
       prisma.projectDecision.groupBy({
         by: ["isActive"],
-        where: { decisionCode: { startsWith: "DE_" } },
+        where: {
+          decisionCode: { startsWith: "DE_" },
+          project: { workspaceId: selectedWorkspace.id },
+        },
         _count: { _all: true },
       }),
     ]);

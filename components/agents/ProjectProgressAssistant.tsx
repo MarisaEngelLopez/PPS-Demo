@@ -11,6 +11,7 @@ import {
   speakVoiceConfirmationSegments,
   type VoiceConfirmationSegment,
 } from "@/components/agents/voiceConfirmation";
+import { runAgentActionAndSwitchTab } from "@/components/agents/runAgentActionAndSwitchTab";
 import {
   compactInputStyle,
   inputStyle,
@@ -275,6 +276,21 @@ export function ProjectProgressAssistant({
     [projectEvents, projectId]
   );
 
+  async function createSuggestionAndReview(
+    action: AssistantAction,
+    formData: FormData,
+    afterAction?: () => void
+  ) {
+    await runAgentActionAndSwitchTab({
+      handleAction,
+      action,
+      formData,
+      setActiveTab,
+      tab: "REVIEW",
+      afterAction,
+    });
+  }
+
   function clearNaturalLanguageState() {
     setInterpretation(null);
     setInterpretationMessage("");
@@ -302,15 +318,21 @@ export function ProjectProgressAssistant({
 
     if (pending.targetType === "WORKSTREAM") {
       formData.set("projectWorkstreamId", confirmedTargetId);
-      await handleAction(createWorkstreamCommandSuggestion, formData);
-      clearNaturalLanguageState();
+      await createSuggestionAndReview(
+        createWorkstreamCommandSuggestion,
+        formData,
+        clearNaturalLanguageState
+      );
       return true;
     }
 
     if (pending.targetType === "EVENT") {
       formData.set("eventId", confirmedTargetId);
-      await handleAction(createEventCommandSuggestion, formData);
-      clearNaturalLanguageState();
+      await createSuggestionAndReview(
+        createEventCommandSuggestion,
+        formData,
+        clearNaturalLanguageState
+      );
       return true;
     }
 
@@ -616,8 +638,11 @@ export function ProjectProgressAssistant({
               <form
                 action={async (formData) => {
                   formData.set("clientTimestamp", getClientTimestamp());
-                  await handleAction(createWorkstreamCommandSuggestion, formData);
-                  clearNaturalLanguageState();
+                  await createSuggestionAndReview(
+                    createWorkstreamCommandSuggestion,
+                    formData,
+                    clearNaturalLanguageState
+                  );
                 }}
               >
                 <input type="hidden" name="projectId" value={interpretation.projectId} />
@@ -666,8 +691,11 @@ export function ProjectProgressAssistant({
               <form
                 action={async (formData) => {
                   formData.set("clientTimestamp", getClientTimestamp());
-                  await handleAction(createEventCommandSuggestion, formData);
-                  clearNaturalLanguageState();
+                  await createSuggestionAndReview(
+                    createEventCommandSuggestion,
+                    formData,
+                    clearNaturalLanguageState
+                  );
                 }}
               >
                 <input type="hidden" name="projectId" value={interpretation.projectId} />
@@ -715,7 +743,7 @@ export function ProjectProgressAssistant({
         action={async (formData) => {
           formData.set("projectId", projectId);
           formData.set("clientTimestamp", getClientTimestamp());
-          await handleAction(createWorkstreamCommandSuggestion, formData);
+          await createSuggestionAndReview(createWorkstreamCommandSuggestion, formData);
         }}
         style={{ display: "grid", gap: "0.5rem", alignItems: "end", maxWidth: 760, marginBottom: "1rem" }}
       >
@@ -762,7 +790,7 @@ export function ProjectProgressAssistant({
         action={async (formData) => {
           formData.set("projectId", projectId);
           formData.set("clientTimestamp", getClientTimestamp());
-          await handleAction(createEventCommandSuggestion, formData);
+          await createSuggestionAndReview(createEventCommandSuggestion, formData);
         }}
         style={{ display: "grid", gap: "0.5rem", alignItems: "end", maxWidth: 760, marginBottom: "1rem" }}
       >
@@ -804,7 +832,7 @@ export function ProjectProgressAssistant({
         <form
           action={async (formData) => {
             formData.set("projectId", projectId);
-            await handleAction(createVisibilityCleanupSuggestion, formData);
+            await createSuggestionAndReview(createVisibilityCleanupSuggestion, formData);
           }}
         >
           <button type="submit" style={tableButtonStyle}>{t("actions.suggestDetailedVisibility")}</button>
@@ -812,7 +840,7 @@ export function ProjectProgressAssistant({
         <form
           action={async (formData) => {
             formData.set("projectId", projectId);
-            await handleAction(createAccomplishmentsSuggestion, formData);
+            await createSuggestionAndReview(createAccomplishmentsSuggestion, formData);
           }}
         >
           <button type="submit" style={tableButtonStyle}>{t("actions.generateAccomplishments")}</button>

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 import {
   CUSTOMER_DNA_CATEGORIES,
   CUSTOMER_DNA_PRIORITIES,
@@ -49,6 +50,14 @@ function revalidateCustomerDna() {
   revalidatePath("/attention");
 }
 
+async function projectBelongsToSelectedWorkspace(projectId: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
+  return prisma.project.findFirst({
+    where: { id: projectId, workspaceId: selectedWorkspace.id, isActive: true },
+    select: { id: true },
+  });
+}
+
 export async function createCustomerDna(formData: FormData) {
   const projectId = String(formData.get("projectId") || "");
   const statement = String(formData.get("statement") || "").trim();
@@ -58,6 +67,11 @@ export async function createCustomerDna(formData: FormData) {
   }
 
   try {
+    const project = await projectBelongsToSelectedWorkspace(projectId);
+    if (!project) {
+      return error("Customer DNA not created: project is not in the selected workspace.");
+    }
+
     await prisma.customerDna.create({
       data: {
         projectId,
@@ -102,6 +116,21 @@ export async function updateCustomerDna(formData: FormData) {
   }
 
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
+    const [project, existing] = await Promise.all([
+      prisma.project.findFirst({
+        where: { id: projectId, workspaceId: selectedWorkspace.id, isActive: true },
+        select: { id: true },
+      }),
+      prisma.customerDna.findFirst({
+        where: { id, project: { workspaceId: selectedWorkspace.id } },
+        select: { id: true },
+      }),
+    ]);
+    if (!project || !existing) {
+      return error("Customer DNA not updated: record is not in the selected workspace.");
+    }
+
     await prisma.customerDna.update({
       where: { id },
       data: {
@@ -141,7 +170,10 @@ export async function deleteCustomerDna(formData: FormData) {
   if (!id) return error("Customer DNA not deleted: missing id.");
 
   try {
-    const item = await prisma.customerDna.findUnique({ where: { id } });
+    const selectedWorkspace = await getSelectedWorkspace();
+    const item = await prisma.customerDna.findFirst({
+      where: { id, project: { workspaceId: selectedWorkspace.id } },
+    });
     if (!item) return error("Customer DNA not deleted: not found.");
     if (item.status !== "NOT_ADDRESSED") {
       return error(

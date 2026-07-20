@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/layoutStyles";
 import { translate } from "@/lib/i18n/dictionaries";
 import { getServerLocale } from "@/lib/i18n/server";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 import {
   createOrganization,
   updateOrganization,
@@ -18,7 +19,9 @@ import {
 
 export default async function OrganizationsPage() {
   const locale = await getServerLocale();
+  const selectedWorkspace = await getSelectedWorkspace();
   const organizations = await prisma.organization.findMany({
+    where: { workspaceId: selectedWorkspace.id },
     include: {
       contacts: {
         include: {
@@ -49,6 +52,9 @@ export default async function OrganizationsPage() {
   return (
     <main style={pageStyle}>
       <h1 style={h1Style}>{translate(locale, "nav.organizations")}</h1>
+      <p style={{ color: "#64748b", fontSize: "0.9rem", marginTop: "-0.5rem" }}>
+        Workspace: {selectedWorkspace.code} - {selectedWorkspace.name}
+      </p>
 
       <div style={{ ...sectionPanelStyle, marginBottom: "1rem" }}>
         {translate(locale, "pages.organizationsDescription")}

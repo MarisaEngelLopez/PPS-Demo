@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 import {
   EXECUTIVE_INTELLIGENCE_CATEGORIES,
   EXECUTIVE_INTELLIGENCE_CONFIDENCES,
@@ -51,6 +52,14 @@ function revalidateExecutiveIntelligence() {
   revalidatePath("/knowledge/executive-intelligence");
 }
 
+async function organizationBelongsToSelectedWorkspace(organizationId: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
+  return prisma.organization.findFirst({
+    where: { id: organizationId, workspaceId: selectedWorkspace.id, isActive: true },
+    select: { id: true },
+  });
+}
+
 export async function createExecutiveIntelligence(formData: FormData) {
   const organizationId = String(formData.get("organizationId") || "");
   const note = String(formData.get("note") || "").trim();
@@ -60,6 +69,11 @@ export async function createExecutiveIntelligence(formData: FormData) {
   }
 
   try {
+    const organization = await organizationBelongsToSelectedWorkspace(organizationId);
+    if (!organization) {
+      return error("Executive intelligence not created: organization is not in the selected workspace.");
+    }
+
     await prisma.executiveIntelligence.create({
       data: {
         organizationId,
@@ -110,6 +124,18 @@ export async function updateExecutiveIntelligence(formData: FormData) {
   }
 
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
+    const [organization, existing] = await Promise.all([
+      organizationBelongsToSelectedWorkspace(organizationId),
+      prisma.executiveIntelligence.findFirst({
+        where: { id, organization: { workspaceId: selectedWorkspace.id } },
+        select: { id: true },
+      }),
+    ]);
+    if (!organization || !existing) {
+      return error("Executive intelligence not updated: record is not in the selected workspace.");
+    }
+
     await prisma.executiveIntelligence.update({
       where: { id },
       data: {
@@ -155,6 +181,15 @@ export async function deleteExecutiveIntelligence(formData: FormData) {
   if (!id) return error("Executive intelligence not deleted: missing id.");
 
   try {
+    const selectedWorkspace = await getSelectedWorkspace();
+    const existing = await prisma.executiveIntelligence.findFirst({
+      where: { id, organization: { workspaceId: selectedWorkspace.id } },
+      select: { id: true },
+    });
+    if (!existing) {
+      return error("Executive intelligence not deleted: record is not in the selected workspace.");
+    }
+
     await prisma.executiveIntelligence.delete({ where: { id } });
     revalidateExecutiveIntelligence();
     return ok("Executive intelligence deleted successfully.");

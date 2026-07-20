@@ -1,0 +1,57 @@
+{
+  "reportType": "V3_3_SECURITY_SEED_BACKFILL",
+  "generatedAt": "2026-07-18T10:25:06.401Z",
+  "mode": "apply",
+  "database": {
+    "configuredUrl": "file:./data/dev-sandbox.db",
+    "resolvedPath": "C:\\Users\\maris\\Documents\\Project Management system 2\\project-ops-system\\data\\dev-sandbox.db",
+    "classification": "SANDBOX_DEV",
+    "sha256": "9ee11caca589c817a4c1a6688694608014f2d15d19448b405feb2d81027ffbe3",
+    "bytes": 2957312,
+    "modifiedAt": "2026-07-18T10:24:57.109Z"
+  },
+  "gates": {
+    "missingTables": [],
+    "missingColumns": [],
+    "canRunDataPlan": true
+  },
+  "plan": {
+    "roles": [
+      {
+        "code": "OWNER_ADMIN",
+        "name": "Owner administrator"
+      },
+      {
+        "code": "PROJECT_MANAGER",
+        "name": "Project manager"
+      },
+      {
+        "code": "DEMO_VIEWER",
+        "name": "Demo viewer"
+      }
+    ],
+    "workspaces": [
+      {
+        "code": "LIVE",
+        "name": "Live workspace",
+        "type": "LIVE"
+      },
+      {
+        "code": "DEMO",
+        "name": "Demo workspace",
+        "type": "DEMO"
+      }
+    ],
+    "liveProjectBackfill": "Set Project.workspaceId to LIVE only where workspaceId is NULL.",
+    "organizationBackfill": "Set Organization.workspaceId to LIVE only where workspaceId is NULL.",
+    "ownerBootstrap": "Create OWNER_ADMIN workspace memberships only after operator supplies an approved owner User.id in a later script revision.",
+    "demoFixtures": "Create synthetic DEMO records only after fixture scope is approved. Never copy LIVE records into DEMO."
+  },
+  "results": {
+    "rolesUpserted": 3,
+    "workspacesUpserted": 2,
+    "projectsAssignedToLive": 5,
+    "organizationsAssignedToLive": 4
+  },
+  "warnings": []
+}

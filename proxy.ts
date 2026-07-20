@@ -2,6 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 
 const accessCookieName = "pps_access_token";
 const accessQueryParam = "accessToken";
+const authSessionCookieNames = [
+  "better-auth.session_token",
+  "__Secure-better-auth.session_token",
+  "__Host-better-auth.session_token",
+];
+
+function isDemoPath(pathname: string) {
+  return pathname.toLowerCase() === "/demo";
+}
+
+function isPublicAppPath(pathname: string) {
+  return (
+    isDemoPath(pathname) ||
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname.startsWith("/api/auth/")
+  );
+}
+
+function hasAuthSessionCookie(request: NextRequest) {
+  return authSessionCookieNames.some((cookieName) =>
+    Boolean(request.cookies.get(cookieName)?.value)
+  );
+}
 
 function isLocalHost(hostname: string) {
   return (
@@ -87,6 +111,19 @@ export function proxy(request: NextRequest) {
   const configuredToken = process.env.PPS_ACCESS_TOKEN?.trim();
   const url = request.nextUrl;
   const host = url.hostname;
+
+  if (url.pathname !== "/demo" && isDemoPath(url.pathname)) {
+    const demoUrl = url.clone();
+    demoUrl.pathname = "/demo";
+    return NextResponse.redirect(demoUrl);
+  }
+
+  if (!isPublicAppPath(url.pathname) && !hasAuthSessionCookie(request)) {
+    const demoUrl = url.clone();
+    demoUrl.pathname = "/demo";
+    demoUrl.search = "";
+    return NextResponse.redirect(demoUrl, request.method === "GET" ? 307 : 303);
+  }
 
   if (isLocalHost(host) && !isForwardedRemoteRequest(request)) {
     return NextResponse.next();

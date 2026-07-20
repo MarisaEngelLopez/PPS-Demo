@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getSelectedWorkspace } from "@/lib/workspaceContext";
 
 function textOrNull(value: FormDataEntryValue | null) {
   const text = String(value || "").trim();
@@ -14,6 +15,28 @@ function numberOrNull(value: FormDataEntryValue | null) {
 
   const number = Number(text);
   return Number.isNaN(number) ? null : number;
+}
+
+async function projectInSelectedWorkspace(projectId: string) {
+  const selectedWorkspace = await getSelectedWorkspace();
+  return prisma.project.findFirst({
+    where: { id: projectId, workspaceId: selectedWorkspace.id },
+    select: { id: true },
+  });
+}
+
+async function projectWorkstreamInSelectedWorkspace(
+  projectId: string,
+  projectWorkstreamId: string
+) {
+  const selectedWorkspace = await getSelectedWorkspace();
+  return prisma.projectWorkstream.findFirst({
+    where: {
+      id: projectWorkstreamId,
+      projectId,
+      project: { workspaceId: selectedWorkspace.id },
+    },
+  });
 }
 
 export async function addProjectWorkstream(
@@ -29,6 +52,7 @@ export async function addProjectWorkstream(
   const visibility = String(formData.get("visibility") || "BOTH").trim();
 
   if (!projectId || !workstreamId) return;
+  if (!(await projectInSelectedWorkspace(projectId))) return;
 
   await prisma.projectWorkstream.create({
     data: {
@@ -62,6 +86,7 @@ export async function updateProjectWorkstreamDetails(
   const id = String(formData.get("id") || "").trim();
 
   if (!projectId || !id) return;
+  if (!(await projectWorkstreamInSelectedWorkspace(projectId, id))) return;
 
   await prisma.projectWorkstream.update({
     where: { id },
@@ -86,9 +111,10 @@ export async function toggleProjectWorkstream(
   projectId: string,
   projectWorkstreamId: string
 ) {
-  const current = await prisma.projectWorkstream.findUnique({
-    where: { id: projectWorkstreamId },
-  });
+  const current = await projectWorkstreamInSelectedWorkspace(
+    projectId,
+    projectWorkstreamId
+  );
 
   if (!current) return;
 
@@ -104,6 +130,10 @@ export async function deleteProjectWorkstream(
   projectId: string,
   projectWorkstreamId: string
 ) {
+  if (!(await projectWorkstreamInSelectedWorkspace(projectId, projectWorkstreamId))) {
+    return;
+  }
+
   await prisma.projectWorkstream.delete({
     where: { id: projectWorkstreamId },
   });

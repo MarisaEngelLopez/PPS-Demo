@@ -1,0 +1,66 @@
+{
+  "reportType": "V3_3_SECURITY_SEED_BACKFILL",
+  "generatedAt": "2026-07-18T09:20:09.660Z",
+  "mode": "dry-run",
+  "database": {
+    "configuredUrl": "file:./data/dev-sandbox.db",
+    "resolvedPath": "C:\\Users\\maris\\Documents\\Project Management system 2\\project-ops-system\\data\\dev-sandbox.db",
+    "classification": "SANDBOX_DEV",
+    "sha256": "23664e484a69d253a3546d09fb0491353c93b06db7e4176454484bf74e02c4dc",
+    "bytes": 2748416,
+    "modifiedAt": "2026-07-17T11:08:38.417Z"
+  },
+  "gates": {
+    "missingTables": [
+      "Workspace",
+      "Role",
+      "WorkspaceMembership"
+    ],
+    "missingColumns": [
+      "Project.workspaceId",
+      "Organization.workspaceId"
+    ],
+    "canRunDataPlan": false
+  },
+  "plan": {
+    "roles": [
+      {
+        "code": "OWNER_ADMIN",
+        "name": "Owner administrator"
+      },
+      {
+        "code": "PROJECT_MANAGER",
+        "name": "Project manager"
+      },
+      {
+        "code": "DEMO_VIEWER",
+        "name": "Demo viewer"
+      }
+    ],
+    "workspaces": [
+      {
+        "code": "LIVE",
+        "name": "Live workspace",
+        "type": "LIVE"
+      },
+      {
+        "code": "DEMO",
+        "name": "Demo workspace",
+        "type": "DEMO"
+      }
+    ],
+    "liveProjectBackfill": "Set Project.workspaceId to LIVE only where workspaceId is NULL.",
+    "organizationBackfill": "Set Organization.workspaceId to LIVE only where workspaceId is NULL.",
+    "ownerBootstrap": "Create OWNER_ADMIN workspace memberships only after operator supplies an approved owner User.id in a later script revision.",
+    "demoFixtures": "Create synthetic DEMO records only after fixture scope is approved. Never copy LIVE records into DEMO."
+  },
+  "results": {
+    "rolesUpserted": 0,
+    "workspacesUpserted": 0,
+    "projectsAssignedToLive": 0,
+    "organizationsAssignedToLive": 0
+  },
+  "warnings": [
+    "V3.3 security schema is not present yet. This script is intentionally scaffolded and made no data changes."
+  ]
+}
