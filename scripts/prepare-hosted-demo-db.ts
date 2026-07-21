@@ -11,7 +11,7 @@ function databasePathFromUrl(databaseUrl: string) {
   return databaseUrl.slice("file:".length);
 }
 
-const databaseUrl = process.env.DATABASE_URL ?? "file:/var/data/pps-demo-package.db";
+const databaseUrl = process.env.DATABASE_URL ?? "file:./data/pps-demo-package.db";
 const targetDatabasePath = databasePathFromUrl(databaseUrl);
 const bundledDatabaseUrl = "file:./data/pps-demo-package.db";
 

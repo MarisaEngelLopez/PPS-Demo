@@ -5,6 +5,7 @@ import "./prepare-hosted-demo-db";
 
 const port = process.env.PORT ?? "10000";
 const publicUrl = process.env.RENDER_EXTERNAL_URL ?? process.env.BETTER_AUTH_URL;
+const databaseUrl = process.env.DATABASE_URL ?? "file:./data/pps-demo-package.db";
 
 const child = spawn(
   process.execPath,
@@ -14,7 +15,7 @@ const child = spawn(
     env: {
       ...process.env,
       BETTER_AUTH_URL: publicUrl,
-      DATABASE_URL: process.env.DATABASE_URL ?? "file:/var/data/pps-demo-package.db",
+      DATABASE_URL: databaseUrl,
       NEXT_PUBLIC_APP_ENV: "DEMO_PACKAGE",
       NEXT_PUBLIC_APP_VERSION: "v3.3-demo-hosted",
       PPS_PUBLIC_HOSTNAME: process.env.RENDER_EXTERNAL_HOSTNAME ?? "",

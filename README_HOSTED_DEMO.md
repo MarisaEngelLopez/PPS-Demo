@@ -6,9 +6,7 @@ The hosted app uses the demo-only SQLite database:
 
 `data/pps-demo-package.db`
 
-On Render, the app copies this bundled demo database to the persistent disk on first start:
-
-`/var/data/pps-demo-package.db`
+On Render Free, the app uses the bundled demo database directly.
 
 ## Render Settings
 
@@ -17,13 +15,12 @@ Use the included `render.yaml` as a Render Blueprint, or create a Web Service ma
 - Runtime: `Node`
 - Build command: `npm ci && npx prisma generate && npm run build`
 - Start command: `npm run start:hosted-demo`
-- Persistent disk mount path: `/var/data`
-- Disk size: `1 GB`
+- Plan: Free
 
 Environment variables:
 
 ```text
-DATABASE_URL=file:/var/data/pps-demo-package.db
+DATABASE_URL=file:./data/pps-demo-package.db
 NEXT_PUBLIC_APP_ENV=DEMO_PACKAGE
 NEXT_PUBLIC_APP_VERSION=v3.3-demo-hosted
 BETTER_AUTH_SECRET=<generate a secure value>
