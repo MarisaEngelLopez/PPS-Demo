@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: pps-demo
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npm run start:hosted-demo
+    disk:
+      name: pps-demo-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        value: file:/var/data/pps-demo-package.db
+      - key: NEXT_PUBLIC_APP_ENV
+        value: DEMO_PACKAGE
+      - key: NEXT_PUBLIC_APP_VERSION
+        value: v3.3-demo-hosted
+      - key: BETTER_AUTH_SECRET
+        generateValue: true

@@ -5,8 +5,23 @@ import { redirect } from "next/navigation";
 import { DemoLoginForm } from "@/app/demo/DemoLoginForm";
 import { auth } from "@/lib/auth";
 
+function getDemoPackageMobileUrls() {
+  const origins = process.env.PPS_ALLOWED_ORIGINS?.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean) ?? [];
+
+  return origins
+    .map((origin) =>
+      origin.startsWith("http://") || origin.startsWith("https://")
+        ? origin
+        : `http://${origin}`,
+    )
+    .map((origin) => `${origin.replace(/\/$/, "")}/demo`);
+}
+
 export default async function DemoPage() {
   const isDemoPackage = process.env.NEXT_PUBLIC_APP_ENV === "DEMO_PACKAGE";
+  const mobileUrls = isDemoPackage ? getDemoPackageMobileUrls() : [];
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -68,6 +83,54 @@ export default async function DemoPage() {
         </div>
 
         <DemoLoginForm />
+
+        {isDemoPackage ? (
+          <div
+            style={{
+              borderTop: "1px solid #e2e8f0",
+              display: "grid",
+              gap: "0.6rem",
+              paddingTop: "0.85rem",
+            }}
+          >
+            <div style={{ display: "grid", gap: "0.2rem" }}>
+              <strong style={{ color: "#14532d", fontSize: "0.92rem" }}>
+                Mobile access
+              </strong>
+              <span style={{ color: "#475569", fontSize: "0.84rem", lineHeight: 1.4 }}>
+                Open one of these addresses on a phone connected to the same network.
+              </span>
+            </div>
+
+            {mobileUrls.length > 0 ? (
+              <div style={{ display: "grid", gap: "0.45rem" }}>
+                {mobileUrls.map((url) => (
+                  <a
+                    href={url}
+                    key={url}
+                    style={{
+                      background: "#f0fdf4",
+                      border: "1px solid #bbf7d0",
+                      borderRadius: 8,
+                      color: "#166534",
+                      fontSize: "0.82rem",
+                      fontWeight: 700,
+                      overflowWrap: "anywhere",
+                      padding: "0.55rem 0.65rem",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {url}
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <span style={{ color: "#b45309", fontSize: "0.84rem" }}>
+                Mobile URL not detected. Restart the demo package launcher.
+              </span>
+            )}
+          </div>
+        ) : null}
 
         {!isDemoPackage ? (
           <div

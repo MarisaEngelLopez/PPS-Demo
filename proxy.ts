@@ -125,6 +125,10 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(demoUrl, request.method === "GET" ? 307 : 303);
   }
 
+  if (process.env.NEXT_PUBLIC_APP_ENV === "DEMO_PACKAGE") {
+    return NextResponse.next();
+  }
+
   if (isLocalHost(host) && !isForwardedRemoteRequest(request)) {
     return NextResponse.next();
   }

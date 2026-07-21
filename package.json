@@ -6,6 +6,7 @@
     "dev": "next dev",
     "dev:sandbox": "tsx scripts/dev-sandbox.ts",
     "dev:demo-package": "tsx scripts/dev-demo-package.ts",
+    "start:hosted-demo": "tsx scripts/start-hosted-demo.ts",
     "db:create-sandbox": "tsx scripts/create-dev-sandbox-db.ts",
     "db:create-demo-package": "tsx scripts/create-demo-package-db.ts",
     "db:preflight": "tsx scripts/db-preflight.ts",

@@ -23,6 +23,9 @@ const allowedDevOrigins = [
 
 const nextConfig: NextConfig = {
   allowedDevOrigins,
+  turbopack: {
+    root: __dirname,
+  },
   experimental: {
     serverActions: {
       allowedOrigins: [
@@ -30,6 +33,8 @@ const nextConfig: NextConfig = {
         "127.0.0.1:3000",
         "localhost:3001",
         "127.0.0.1:3001",
+        "localhost:3002",
+        "127.0.0.1:3002",
         ...remoteOrigins,
       ],
     },

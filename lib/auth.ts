@@ -15,6 +15,8 @@ function normalizeTrustedOrigin(value: string) {
 
 const configuredTrustedOrigins = [
   process.env.PPS_PUBLIC_HOSTNAME,
+  process.env.RENDER_EXTERNAL_URL,
+  process.env.RENDER_EXTERNAL_HOSTNAME,
   ...(process.env.PPS_ALLOWED_ORIGINS?.split(",") ?? []),
   ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? []),
 ]
@@ -30,7 +32,8 @@ const trustedOrigins = [
 ];
 
 export const auth = betterAuth({
-  baseURL: process.env.BETTER_AUTH_URL,
+  baseURL: process.env.BETTER_AUTH_URL ?? process.env.RENDER_EXTERNAL_URL,
+  secret: process.env.BETTER_AUTH_SECRET,
   database: prismaAdapter(prisma, {
     provider: "sqlite",
   }),

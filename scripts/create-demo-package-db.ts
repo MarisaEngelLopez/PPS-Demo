@@ -21,6 +21,11 @@ const referenceTables = [
   "EventType",
   "RiskCategory",
   "EvidenceType",
+  "AgentDefinition",
+  "AgentCapability",
+  "AgentSourceConfig",
+  "AgentRule",
+  "AgentInstructionTemplate",
 ];
 
 function argValue(name: string) {
